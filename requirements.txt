@@ -1,0 +1,3 @@
+numpy>=1.17.2
+Shapely>=1.6.4.post2
+osmxtract>=0.0.1
