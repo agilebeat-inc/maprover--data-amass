@@ -127,7 +127,7 @@ def process_node(node_dict,tile_size):
     return (pt,1)
 
 def process_relation(rel_dict,tile_size):
-    pass
+    raise NotImplementedError("we must implement the relations!")
 
 def tile2json(tile):
     """
@@ -146,7 +146,22 @@ def tile2json(tile):
     jsn['geometry'] = [{'lat': x,'lon':y} for x,y in tile.exterior.coords]
     return jsn
 
-def process_query(ovp_query):
+def find_tile_coords(tile,zoom : int):
+    """
+    given a tile identified as 'of interest',
+    get the map coordinates based on the centroid
+    Args:
+        tile: a shapely Polygon (should be a box as returned from process_node, process_way)
+        whose vertices are latitude/longitude coordinates
+        zoom: level of zoom between 1 and 19
+    Returns: the map coordinates as determined by TileGenerator.deg2num
+    """
+    if int(zoom) != zoom or zoom < 1 or zoom > 19:
+        raise ValueError(f"zoom should be an integer in [1,19]; got {zoom}")
+    center = list(tile.centroid.coords)[0]
+    return deg2num(*center,zoom)
+
+def process_query(ovp_query,zoom):
     """
     an Overpass API query returns a geoJSON response. This function loops over the response
     list and finds tiles which overlap with the query response. It appends the tiles
@@ -162,16 +177,29 @@ def process_query(ovp_query):
     relations = [e for e in elems if e['type'] == 'relation']
     for elem in nodes:
         tile = process_node(elem,0.01) # need to coordinate the size with zooming!
-        elem['tiles'] = [tile2json(tile[0])]
+        elem['tiles'] = [tile]
+        elem['json_tiles'] = [tile2json(tile[0])]
     for elem in ways:
         tiles = process_way(elem)
-        elem['tiles'] = [tile2json(t[0]) for t in tiles]
+        elem['tiles'] = tiles
+        elem['json_tiles'] = [tile2json(t[0]) for t in tiles]
     for elem in relations:
         tiles = process_relation(elem,0.01)
-        elem['tiles'] = [tile2json(t[0]) for t in tiles]
+        elem['tiles'] = tiles
+        elem['json_tiles'] = [tile2json(t[0]) for t in tiles]
     new_elems = nodes + ways + relations
     ovp_query['elements'] = new_elems
     return ovp_query
+
+def calc_map_locations(processed_query,zoom):
+    """
+    given a processed query (return value of process_query),
+    and level of zooming, find the corresponding map coordinates to fetch the tiles
+    """
+    res = ()
+    for elem in processed_query['elements']:
+        res.update(find_tile_coords(tile,zoom) for tile in elem['tiles'])
+    return list(res)
 
 def sh_creator(geojson, zooms, file_path):
 
