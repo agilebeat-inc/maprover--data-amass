@@ -107,7 +107,6 @@ def process_way(way_dict,**kwargs):
     else:
         LS = geom.LineString(coords)
         poly = way_to_poly(LS)
-    print(f"The type of poly is {type(poly)}")
     # set default values which must be given to polygon_tiles function:
     kwargs.setdefault('n_tile',25)
     kwargs.setdefault('min_ovp',0.05)
@@ -163,7 +162,7 @@ def find_tile_coords(tile,zoom : int):
 
 def process_query(ovp_query,zoom):
     """
-    an Overpass API query returns a geoJSON response. This function loops over the response
+    an Overpass API query returns a geoJSON-like response. This function loops over the response
     list and finds tiles which overlap with the query response. It appends the tiles
     to the query response, returning an augmented geoJSON object.
     Args:
@@ -196,9 +195,9 @@ def calc_map_locations(processed_query,zoom):
     given a processed query (return value of process_query),
     and level of zooming, find the corresponding map coordinates to fetch the tiles
     """
-    res = ()
+    res = set()
     for elem in processed_query['elements']:
-        res.update(find_tile_coords(tile,zoom) for tile in elem['tiles'])
+        res.update(find_tile_coords(tile[0],zoom) for tile in elem['tiles'])
     return list(res)
 
 def sh_creator(geojson, zooms, file_path):
@@ -244,13 +243,14 @@ if __name__ == "__main__":
     
     import tile_funcs as TF
     # testing:
-    CN_mil = TF.TileCollection(place = "Beijing, China", buffer_size = 200000, 
+    CN_mil = run_ql_query(place = "Beijing, China", buffersize = 200000, 
         tag = 'military', values = ['airfield'])
-    # bnd = CN_mil.boundaries(80000) # two corners defining a boundary box
 
-    CN_mil.run_query() # gets results from overpass and stores in 'response' field
 
-    resp = CN_mil.response['elements'] # a list of dicts
+    resp = CN_mil['elements'] # a list of dicts
 
     pw = process_way(resp[1],max_ovp = 0.8)
     unary_union([p[0] for p in pw])
+
+    qq = process_query(CN_mil,10)
+    calc_map_locations(qq,15)

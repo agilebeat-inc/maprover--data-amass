@@ -34,7 +34,6 @@ def num2deg(xtile, ytile, zoom):
   lat_deg = math.degrees(lat_rad)
   return (lat_deg, lon_deg)
 
-
 def generate_geojson(points):
     geojson = {'type': 'FeatureCollection', 'features': []}
     for p in points:

@@ -28,7 +28,8 @@ class TileCollection:
      
     def boundaries(self,buf = None):
         """
-        # Define area in lat/long where tiles are extracted
+        Define area in lat/long where tiles are extracted
+        Args: buf (optional, defaults to self.buffer_size)
         """
         if buf is None: buf = self.buffer_size
         lat, lon = location.geocode(self.place)
@@ -55,66 +56,30 @@ class TileCollection:
             for point in zip(LAT,LON)]
         return parsed_to_points
     
-    # we want to defer untoward manipulation of ways and relations till we're matching
-    # tiles against them.
-    # def json_to_geojson(self):
-        
-    #     if self.response is None:
-    #         self.run_query()
-        
-    #     features_to_points = []
-    #     data = self.reponse
-        
-    #     for elem in data['elements']: 
-    #         if elem['type'] == 'node':
-    #             features_to_points.append(elem)
-        
-    #         elif elem['type'] == 'way':
-    #             features_to_points.append(self.way_to_nodes(elem))
-        
-    #         else:
-    #             features_to_points += [self.way_to_nodes(member) for member in elem['members']]
+def run_ql_query(place,buffersize,tag,values,case = False,timeout = 25):
+    """
+    Run an overpass API query
 
-    #     feature_collection = [overpass.as_geojson(f, 'point') for f in features_to_points]
-    #     return feature_collection
+    Args:
+        place: either a location such as "Tuscaloosa, AL", 91210 
+        or a (latitiude,longitude) tuple
+        buffersize: size, in meters, 
+
+    """
+    # Determine the bounding box
+    if type(place) in (str,int):
+        lat, lon = location.geocode(place)
+    elif type(place) in (list,tuple):
+        lat, lon = [float(place[0]),float(place[1])]
+    else:
+        raise ValueError("'place' should be a string, integer, or length-2 list")
+    bounds = location.from_buffer(lat, lon, buffer_size = buffersize)
+    query = overpass.ql_query(bounds, tag, values,case,timeout)
+    return overpass.request(query)
 
 if __name__ == '__main__':
 
-    CN_mil = TileCollection(place = "Beijing, China", buffer_size = 200000, 
+    CN_mil = run_ql_query(place = "Beijing, China", buffersize = 200000, 
         tag = 'military', values = ['airfield'])
-    bnd = CN_mil.boundaries(80000) # two corners defining a boundary box
 
-    CN_mil.run_query() # actually do the thing?
 
-    resp = CN_mil.response['elements'] # a list of dicts
-    # each element is a geoJSON object. we want to append to the info here
-    # the set of overlapping tiles.
-
-    Counter(e['type'] for e in resp) # all ways
-    [len(e['nodes']) for e in resp]
-    nodeHT = [(e['nodes'][0],e['nodes'][-1]) for e in resp]
-    # is_closed = [a == b for a,b in nodeHT]
-
-    # any closed ways get turned into polygons:
-    # res = []
-    # for e in resp:
-    #     typ = e['type']
-    #     gm = e['geometry']
-    #     if typ == 'node':
-    #         res.append(geom.Point(gm[0]['lat'],gm[0]['lon']))
-    #     elif typ == 'way':
-    #         is_closed = e['nodes'][0] == e['nodes'][-1]
-    #         if is_closed:
-    #             res.append(geom.Polygon(coord_xy(gm)))
-    #         else:
-    #             res.append(geom.LineString(coord_xy(gm)))
-    #     elif typ == 'relation':
-    #         pass # figure this out later!
-    #     else:
-    #         raise ValueError(f"unknown type {typ}! RUn away!")
-
-    # json_blob = CN_mil.json_to_geojson('airfield_Bejing')
-    
-    # the Overpass API response is already in geoJSON
-    with open('foo.txt','w') as fh:
-        json.dumps(resp)
