@@ -16,6 +16,8 @@ There are really two distinct steps in the 'pipeline'; the first fetches data ab
 
 - `include_partial`: should entities which partially overlap with the search region be counted and included in the result set?
 
+This first step is in the works as `run_ql_query` in `TileGenerator.py`, which returns the JSON object from Overpass for further processing.
+
 The second part concerns fetching map tiles which overlap the item(s) of interest. The reason to decouple this transaction from the first part is that we may wish to fetch tiles for the same object but at different zoom levels, or with different input parameters. However we need not redo the work in the first step for such refinements. Likewise, we might combine the result sets of a few different queries before fetching the matching tiles.
 
 Parameters for this step:
@@ -38,5 +40,4 @@ w1.buffer(0.2)
 ```
 
 The bounding box for this shape is 5x6 (check `w1.envelope.area == 30`) and adding a buffer of 0.2 (about 0.1 in proportion to the object width) creates a nicely-sized shape whose area is also about 10% (since the object is mostly linear)
-
 

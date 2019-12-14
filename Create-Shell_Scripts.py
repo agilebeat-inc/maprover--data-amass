@@ -1,12 +1,19 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import TileGenrator as TG
-import random
 import numpy as np
+import random
 from shapely.ops import unary_union
 from shapely.prepared import prep
 import shapely.geometry as geom
+import os, sys
+import subprocess as sp
+# hackery when using in vscode interactive
+if os.getcwd().startswith('/tmp/'):
+    sys.path.append("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1") 
+# the other pieces we need to run queries and get tiles
+from TileGenerator import deg2num, num2deg
+from tile_funcs import run_ql_query
 
 def coord_xy(geojgeom):
     return [(x['lat'], x['lon']) for x in geojgeom]
@@ -22,8 +29,7 @@ def covering_grid(poly,tile_size):
     need to check agaist the actual polygon to see whether
     a given tile from the grid overlaps.
     """
-    # prep only has contains, contains_properly, covers, and intersects
-    # but that's fine since here we just use intersects
+    # prep has methods: contains, contains_properly, covers, and intersects
     bbox = poly.minimum_rotated_rectangle
     pbox = prep(bbox) 
     xL,yL,xR,yU = poly.bounds
@@ -69,7 +75,7 @@ def polygon_tiles(poly,tile_size,n_tile,min_ovp = 0.05,max_ovp = 1):
         if ovp >= min_area and ovp <= max_area:
             res.append((c,ovp))
     if len(res) > n_tile:
-        ix = random.sample(range(len(res)),n_tile)
+        ix = np.random.choice(len(res),n_tile,replace = False)
         res = [res[i] for i in sorted(ix)]
     return res
 
@@ -98,6 +104,16 @@ def way_to_poly(way,buf_prop = 0.07):
     poly = way.buffer(distance = approx_dim(way) * buf_prop,resolution = 4)
     return poly
 
+def process_node(node_dict,tile_size):
+    """
+    if a map feature is really just a single node (ex. a water tower)
+    then we just create a tile that is centered on that spot
+    """
+    pt = geom.Point(coord_xy(node_dict['geometry'])).buffer(tile_size/2).envelope
+    # to be consistent with other return types, return a tuple with (node,overlap)
+    # but overlap is by definition 1 since a node doesn't have area
+    return (pt,1)
+
 def process_way(way_dict,**kwargs):
     # way_dict = resp[1]; tile_size = 1e-4; n_tile = 50; min_ovp = 0.05; max_ovp = 1
     is_closed = way_dict['nodes'][0] == way_dict['nodes'][-1]
@@ -111,19 +127,10 @@ def process_way(way_dict,**kwargs):
     kwargs.setdefault('n_tile',25)
     kwargs.setdefault('min_ovp',0.05)
     kwargs.setdefault('max_ovp',1)
+    # default tile size should be based on zoom...
     kwargs.setdefault('tile_size',0.2 * approx_dim(poly))
     kwargs['poly'] = poly
     return polygon_tiles(**kwargs)
-
-def process_node(node_dict,tile_size):
-    """
-    if a map feature is really just a single node (ex. a water tower)
-    then we just create a tile that is centered on that spot
-    """
-    pt = geom.Point(coord_xy(node_dict['geometry'])).buffer(tile_size/2).envelope
-    # to be consistent with other return types, return a tuple with (node,overlap)
-    # but overlap is by definition 1 since a node doesn't have area
-    return (pt,1)
 
 def process_relation(rel_dict,tile_size):
     raise NotImplementedError("we must implement the relations!")
@@ -234,23 +241,61 @@ def sh_creator(geojson, zooms, file_path):
             if i % 50 == 0:
                 fprint('sleep 1.1')
 
+def save_file(x,y,z,fpath):
+    """
+    Given the tile location (x,y) and zoom level z,
+    fetch the corresponding tile from the server and save it
+    to the location specfied in fpath
+    Args:
+        x,y,z: integers
+        fpath: str
+    Returns: None, called for its side effect of saving a file
+    """
+    url = f"https://{random.choice('abc')}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    fpath = "/mnt/c/Users/skm/Dropbox/AgileBeat/foo.png"
+    # fix to run without shell=True - does it matter?
+    # cmds = ["wget", f"-O {fpath}", f"{url}"]
+    cmds = f"wget -O {fpath} {url}"
+    res = sp.run(cmds,shell = True,stdout = sp.PIPE,stderr = sp.STDOUT)
+    if res.status_code > 0:
+        continue # log errors?
+
 if __name__ == "__main__":
 
-    # example:
-    import os
-    if os.getcwd().startswith("/tmp/"):
-        os.chdir("/mnt/c/Users/skm/Dropbox/AgileBeat")
-    
-    import tile_funcs as TF
+    # TODO: determine tile size from input zoom level
+    # writing unit tests
+    # process_relation function
+    # file names or metadata to encode tag information and coords
+    # file name should function as an ID which can be associated
+    # with the data in query response 'tags' field
+    # or the raw png data can be encoded in a pd.dataframe field
+    # create a class to structure all the functions?
+
     # testing:
-    CN_mil = run_ql_query(place = "Beijing, China", buffersize = 200000, 
-        tag = 'military', values = ['airfield'])
+    CN_mil = run_ql_query(place = "Madrid, Spain", 
+        buffersize = 200000, 
+        tag = 'military', values = ['airfield','bunker'])
 
-
-    resp = CN_mil['elements'] # a list of dicts
-
+    resp = CN_mil['elements'] # what gets processed by other funcs
     pw = process_way(resp[1],max_ovp = 0.8)
     unary_union([p[0] for p in pw])
 
-    qq = process_query(CN_mil,10)
-    calc_map_locations(qq,15)
+    qq = process_query(CN_mil,14)
+    spots = calc_map_locations(qq,15)
+
+    # getting a sample tile:
+    # see https://wiki.openstreetmap.org/wiki/Tile_servers
+    # where the URL composition is defined
+    x,y = spots[1]
+    z = 15
+    save_file(x,y,z,'test.png')
+    
+    # whatever header is sent by default is not responded to
+    # this or using subprocess and wget or curl works
+    # import requests as rq
+    # headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5)\
+    #         AppleWebKit/537.36 (KHTML, like Gecko) Cafari/537.36'}
+    # res = rq.get(url,headers = headers)
+    # print(res.status_code)
+    # with open("/mnt/c/Users/skm/Dropbox/AgileBeat/test.png",'wb') as fh:
+    #     fh.write(res.content)
