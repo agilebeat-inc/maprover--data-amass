@@ -6,6 +6,7 @@ import random
 import os, sys
 import subprocess as sp
 import json
+from time import sleep
 # geometry
 import shapely.geometry as geom
 from shapely.ops import unary_union
@@ -293,14 +294,14 @@ def positive_dataset(processed_query,out_dir,namefunc = None):
     for elem in Elems:
         tagstr = json.dumps(elem['tags'])
         for tile in elem['tiles']:
-            if random.random() < 0.08: sys.sleep(0.67)
+            if random.random() < 0.08: sleep(0.67)
             x,y = find_tile_coords(tile[0],z)
             floc = f"{out_dir}/{namefunc(x,y,z)}"
             # first check whether we already got this tile
             # for example densely packed nodes will have a lot
             # of closely overlapping tiles
             if os.path.exists(floc): continue
-            got_png = save_file(x,y,zfloc)
+            got_png = save_file(x,y,z,floc)
             if got_png is 0:
                 xx.append(x)
                 yy.append(y)
