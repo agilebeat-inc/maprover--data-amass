@@ -26,6 +26,18 @@ def deg2num(lat_deg, lon_deg, zoom):
   ytile = (n / 2) * (1.0 - math.asinh(math.tan(lat_rad))/math.pi)
   return (int(xtile), int(ytile))
 
+# defining the size of tiles (in terms of latitude/longitude)
+# for a given zoom level and (lat,lon)
+# longitude is easy; # tiles is simply 2^z so tile width is 2^-z
+# latitude depends on the location
+# however a tile should be 'square' so must these match up?
+# it doesn't necessarily matter so long as the relationship is monotone
+# and provides enough range (i.e. at most zoom levels, tiles are not)
+# 'too big' or 'too small'
+def tile_size(y,zoom):
+    width = 2 ** -zoom
+    height = num2deg(0,y,zoom)[1]
+    return width, height
 
 def num2deg(xtile, ytile, zoom):
   n = 2.0 ** zoom

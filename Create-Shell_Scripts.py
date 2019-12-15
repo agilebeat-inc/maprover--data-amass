@@ -1,13 +1,19 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import numpy as np
+# standard modules
 import random
-from shapely.ops import unary_union
-from shapely.prepared import prep
-import shapely.geometry as geom
 import os, sys
 import subprocess as sp
+import json
+# geometry
+import shapely.geometry as geom
+from shapely.ops import unary_union
+from shapely.prepared import prep
+# math/data
+import numpy as np
+import pandas as pd
+
 # hackery when using in vscode interactive
 if os.getcwd().startswith('/tmp/'):
     sys.path.append("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1") 
@@ -109,13 +115,12 @@ def process_node(node_dict,tile_size):
     if a map feature is really just a single node (ex. a water tower)
     then we just create a tile that is centered on that spot
     """
-    pt = geom.Point(coord_xy(node_dict['geometry'])).buffer(tile_size/2).envelope
+    pt = geom.Point(node_dict['lat'],node_dict['lon']).buffer(tile_size/2).envelope
     # to be consistent with other return types, return a tuple with (node,overlap)
-    # but overlap is by definition 1 since a node doesn't have area
+    # but overlap is by definition 1 (or 0?) since a node doesn't have area
     return (pt,1)
 
 def process_way(way_dict,**kwargs):
-    # way_dict = resp[1]; tile_size = 1e-4; n_tile = 50; min_ovp = 0.05; max_ovp = 1
     is_closed = way_dict['nodes'][0] == way_dict['nodes'][-1]
     coords = coord_xy(way_dict['geometry'])
     if is_closed:
@@ -167,6 +172,7 @@ def find_tile_coords(tile,zoom : int):
     center = list(tile.centroid.coords)[0]
     return deg2num(*center,zoom)
 
+# this should become a method?
 def process_query(ovp_query,zoom):
     """
     an Overpass API query returns a geoJSON-like response. This function loops over the response
@@ -195,16 +201,18 @@ def process_query(ovp_query,zoom):
         elem['json_tiles'] = [tile2json(t[0]) for t in tiles]
     new_elems = nodes + ways + relations
     ovp_query['elements'] = new_elems
+    ovp_query['zoom'] = zoom # track @ which zoom it was processed
     return ovp_query
 
-def calc_map_locations(processed_query,zoom):
+def calc_map_locations(processed_query):
     """
     given a processed query (return value of process_query),
     and level of zooming, find the corresponding map coordinates to fetch the tiles
     """
     res = set()
+    z = processed_query['zoom']
     for elem in processed_query['elements']:
-        res.update(find_tile_coords(tile[0],zoom) for tile in elem['tiles'])
+        res.update(find_tile_coords(tile[0],z) for tile in elem['tiles'])
     return list(res)
 
 def sh_creator(geojson, zooms, file_path):
@@ -249,26 +257,70 @@ def save_file(x,y,z,fpath):
     Args:
         x,y,z: integers
         fpath: str
-    Returns: None, called for its side effect of saving a file
+    Returns: int, 0 if successful and 1 otherwise
     """
     url = f"https://{random.choice('abc')}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-    fpath = "/mnt/c/Users/skm/Dropbox/AgileBeat/foo.png"
     # fix to run without shell=True - does it matter?
     # cmds = ["wget", f"-O {fpath}", f"{url}"]
     cmds = f"wget -O {fpath} {url}"
-    res = sp.run(cmds,shell = True,stdout = sp.PIPE,stderr = sp.STDOUT)
-    if res.status_code > 0:
-        continue # log errors?
+    try:
+        res = sp.run(cmds,shell = True,stdout = sp.PIPE,stderr = sp.STDOUT)
+        return 0
+    except Error as e:
+        print(f"Error getting tile: {e}")
+        return 1
+
+def positive_dataset(processed_query,out_dir,namefunc = None):
+    """
+    download the map tiles corresponding to the locations in
+    the given query; save tiles along with a DataFrame of metadata
+    to directory `out_dir`.
+    Args:
+        processed_query: return value of `process_query`
+        out_dir: directory where files should be saved
+        namefunc: function mapping tuple (x,y,z) into a file name
+    """
+    file_locs, xx, yy, qual, tags = ([],[],[],[],[])
+    if namefunc is None:
+        def namefunc(x,y,z):
+            return f'lat_{x}_lon_{y}_zoom_{z}.png'
+    if out_dir.endswith('/'): out_dir = out_dir[:-1]
+    if not os.path.exists(out_dir):
+        os.mkdir(out_dir)
+    Elems = processed_query['elements']
+    z = processed_query['zoom']
+    
+    for elem in Elems:
+        tagstr = json.dumps(elem['tags'])
+        for tile in elem['tiles']:
+            if random.random() < 0.08: sys.sleep(0.67)
+            x,y = find_tile_coords(tile[0],z)
+            floc = f"{out_dir}/{namefunc(x,y,z)}"
+            # first check whether we already got this tile
+            # for example densely packed nodes will have a lot
+            # of closely overlapping tiles
+            if os.path.exists(floc): continue
+            got_png = save_file(x,y,zfloc)
+            if got_png is 0:
+                xx.append(x)
+                yy.append(y)
+                qual.append(tile[1])
+                tags.append(tagstr)
+                file_locs.append(floc)
+    df = pd.DataFrame({
+        'lat' : xx, 'lon': yy, 'z': z,
+        'location': file_locs, 'overlap': qual,'tags': tags,
+        'placename': processed_query['query_info']['placename']
+    })
+    print(f'Got {len(xx)} records!')
+    #TODO: append to existing if there's already data?
+    df.to_csv(path_or_buf = f'{out_dir}/pos_metadata.csv',index = False)
 
 if __name__ == "__main__":
 
     # TODO: determine tile size from input zoom level
     # writing unit tests
     # process_relation function
-    # file names or metadata to encode tag information and coords
-    # file name should function as an ID which can be associated
-    # with the data in query response 'tags' field
-    # or the raw png data can be encoded in a pd.dataframe field
     # create a class to structure all the functions?
 
     # testing:
@@ -280,15 +332,17 @@ if __name__ == "__main__":
     pw = process_way(resp[1],max_ovp = 0.8)
     unary_union([p[0] for p in pw])
 
-    qq = process_query(CN_mil,14)
-    spots = calc_map_locations(qq,15)
+    qq = process_query(CN_mil,16)
+    spots = calc_map_locations(qq)
 
-    # getting a sample tile:
+    positive_dataset(qq,'/mnt/c/Users/skm/Documents/test_picz')
+    # the URL composition is defined for tiles in
     # see https://wiki.openstreetmap.org/wiki/Tile_servers
-    # where the URL composition is defined
-    x,y = spots[1]
-    z = 15
-    save_file(x,y,z,'test.png')
+    # out_dir = "/mnt/c/Users/skm/Dropbox/AgileBeat"
+    # for x,y in spots:
+    #     outF = f"{out_dir}/lat_{x}_lon_{y}_zoom_{z}.png"
+    #     save_file(x,y,15,outF)
+    #     print(f"Got file {outF}")
     
     # whatever header is sent by default is not responded to
     # this or using subprocess and wget or curl works

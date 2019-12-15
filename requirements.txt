@@ -1,3 +1,4 @@
-numpy>=1.17.2
-Shapely>=1.6.4.post2
-osmxtract>=0.0.1
+numpy >= 1.17.2
+pandas >= 0.25.3
+shapely >= 1.6.4.post2
+osmxtract >= 0.0.1

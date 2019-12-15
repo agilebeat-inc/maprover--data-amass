@@ -75,7 +75,15 @@ def run_ql_query(place,buffersize,tag,values,case = False,timeout = 25):
         raise ValueError("'place' should be a string, integer, or length-2 list")
     bounds = location.from_buffer(lat, lon, buffer_size = buffersize)
     query = overpass.ql_query(bounds, tag, values,case,timeout)
-    return overpass.request(query)
+    res = overpass.request(query)
+    # append info about the query so it's automatically tracked
+    res['query_info'] = {
+        'query': query,
+        'placename': place if type(place) in (str,int) else None,
+        'geolocation': (lat,lon),
+        'bounds': bounds
+    }
+    return res
 
 if __name__ == '__main__':
 
