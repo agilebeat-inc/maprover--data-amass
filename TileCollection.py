@@ -31,63 +31,49 @@ def map_features_json_response(bounds, tag, values ):
     
     
 #===================================================
-# Save as a goejson file
+# Save as a geojson file
 #===================================================
-def json_to_geojson(json_response, file_name):
+def json_to_geojson(json_response):
     my_data = json_response['elements']            # -- response is json format 
 
     features_to_points = []
-    for each_feature in my_data: 
-        if 'tags' not in each_feature:
-            each_feature['tags'] = 'Feature'
+    for feature in my_data: 
+        if 'tags' not in feature:
+            feature['tags'] = 'Feature'
         else:
             pass
 
-        if each_feature['type'] == 'node':                                # 'node' element
-            features_to_points = features_to_points + [each_feature]
+        if feature['type'] == 'node':                                # 'node' element
+            features_to_points.append(feature)
 
-        elif each_feature['type'] == 'way' :                              # 'way' element
+        elif feature['type'] == 'way' :                              # 'way' element
             try:
-                LAT = [coordinate['lat'] for coordinate in each_feature['geometry']]
-                LON = [coordinate['lon'] for coordinate in each_feature['geometry']]
-                TYPE = ['node'] * len(LAT)
-                ID = [each_feature['id']] * len(LAT)
-                TAGS = [each_feature['tags']] * len(LAT)
+                LAT = [coordinate['lat'] for coordinate in feature['geometry']]
+                LON = [coordinate['lon'] for coordinate in feature['geometry']]
 
-                points = list(zip(TYPE, ID, LAT, LON, TAGS))   #-- parsing to points
-                parsed_to_points = [{'type':point[0], 'id':point[1], 'lat':point[2], 'lon':point[3], 
-                                     'tags':point[4]} for point in points]
-                features_to_points = features_to_points + parsed_to_points 
+                parsed_to_points = [
+                    {'type': 'node', 'id': feature['id'],
+                     'lat': x, 'lon': y, 'tags': feature['tags']} for x,y in zip(LAT,LON)]
+                features_to_points.extend(parsed_to_points)
             except:
-                pass
+                continue
 
         else:                                                             # 'relation' element
-            parsed_relation = []
-            index =  each_feature['id']
-            tag = each_feature['tags']
-            for member in each_feature['members']:
+            index = feature['id']
+            tag = feature['tags']
+            for member in feature['members']:
                 try:
                     LAT = [coordinate['lat'] for coordinate in member['geometry']]
                     LON = [coordinate['lon'] for coordinate in member['geometry']]
-                    TYPE = ['node'] * len(LAT)             
-                    ID = [index] * len(LAT)
-                    TAGS = [tag] * len(LAT)
 
-                    points = list(zip(TYPE, ID, LAT, LON, TAGS))
-                    parsed_to_way_to_point = [{'type':point[0], 'id':point[1], 'lat':point[2], 'lon':point[3], 
-                                             'tags':point[4]} for point in points]
+                    parsed_to_way_to_point = [
+                        {'type': 'node', 'id': index, 'lat': x, 'lon': y, 
+                         'tags': tag} for x,y in zip(LAT,LON)]
+                    features_to_points.extend(parsed_to_way_to_point)
                 except:
-                    parsed_to_way_to_point = []
-            parsed_relation = parsed_relation + parsed_to_way_to_point
-            features_to_points = features_to_points + parsed_relation 
+                    continue
 
     json_response['elements'] = features_to_points
-    feature_collection = overpass.as_geojson(json_response, 'point') 
+    return ovp.as_geojson(json_response, 'point') 
     
-    f_name = file_name + '.geojson'
-    with open(f_name, 'w') as f:
-        gj = json.dump(feature_collection, f)
-        return gj
-    
-    return None
 
