@@ -40,9 +40,9 @@ while IFS=$'\t'; read -r -a line; do
     cmd="wget -O ${file} ${url}"
     eval "${cmd}"
     ((i++))
-    echo "i = ${i}"
+    # echo "i = ${i}"
     if (($i % $sleep_freq == 0)); then
-        echo "SLEEPING..."
+        echo "zzz..."
         sleep 1.1
     fi
 done < "${filename}"

@@ -133,7 +133,10 @@ def process_way(way_dict,**kwargs):
     return polygon_tiles(**kwargs)
 
 def process_relation(rel_dict,**kwargs):
-    raise NotImplementedError("we must implement the relations!")
+    res = []
+    for mem in rel_dict['members']:
+        res.extend(process_way(mem,kwargs))
+    return res
 
 def tile2json(tile):
     """

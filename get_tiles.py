@@ -16,9 +16,60 @@ import pandas as pd
 if os.getcwd().startswith('/tmp/'):
     sys.path.append("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1") 
 # the other pieces we need to run queries and get tiles
-from TileGenerator import deg2num, num2deg
-from tile_funcs import run_ql_query
+from utils import deg2num, num2deg
 from processing import process_query
+from query_helpers import run_ql_query, atomize_features
+
+def sh_creator(nodes, zooms, positive_file_name, negative_file_name):
+    """
+    The function creates outputs (x,y,z) tile coordinate files which can be
+    fed into download_tiles.sh in order to get tiles from the OSM server
+    - nodes: list of nodes as returned by atomize_features
+    - zooms: zoom levels of tiles to be extracted 
+    - positive_file_name: file name with path for positive dataset
+    - negative_file_name: file name with path for negative dataset
+    """
+    if type(zooms) is int:
+        zooms = [zooms]
+    if any(z < 2 or z > 19 for z in zooms):
+        raise ValueError("all zoom levels must be between 2 and 19")
+    
+    points_list = [(node['lat'],node['lon']) for node in nodes]
+
+    for zoom in zooms:   
+
+        xy = [TG.deg2num(x,y,zoom) for x,y in points_list]
+
+        pos_df = pd.DataFrame.from_records(xy,columns = ['x','y']).drop_duplicates()
+        x_min, x_max, y_min, y_max = min(pos_df['x']), max(pos_df['x']), min(pos_df['y']), max(pos_df['y'])
+        xrng, yrng = range(x_min, x_max+1), range(y_min,y_max+1)
+
+        # get an equal number of 'negative' points which are in the bounding box
+        n_pos = pos_df.shape[0]
+        n_in_box = (x_max - x_min + 1) * (y_max - y_min + 1)
+        if 2 * n_pos > n_in_box:
+            n_neg = n_in_box - n_pos
+        else:
+            n_neg = n_pos
+        
+        neg_xy = set()
+        neg_xy.update((x,y) for x,y in zip(random.sample(xrng,n_neg), random.sample(yrng,n_neg)))
+        while len(neg_xy) < n_neg:
+            neg_xy.update((x,y) for x,y in zip(random.sample(xrng,n_neg), random.sample(yrng,n_neg)))
+        
+        neg_df = pd.DataFrame.from_records(neg_xy,columns = ['x','y']).head(n_neg)
+        pos_df['z'] = zoom
+        neg_df['z'] = zoom
+        pos_df.to_csv(path_or_buf = positive_file_name,sep = '\t',header = False,index = False)
+        neg_df.to_csv(path_or_buf = negative_file_name,sep = '\t',header = False,index = False)
+
+def shell_permission(sh_file_name):
+    """
+    This function gives permission to created shell scripts
+    - sh_file_name: a string. List of .sh file names separated by space
+    """
+    temp = subprocess.Popen(["chmod", "755", sh_file_name], stdout = subprocess.PIPE)
+    data = subprocess.Popen(["ls", '-l', sh_file_name], stdout = subprocess.PIPE) 
 
 def find_tile_coords(tile,zoom : int):
     """
@@ -46,11 +97,12 @@ def calc_map_locations(processed_query):
         res.update(find_tile_coords(tile[0],z) for tile in elem['tiles'])
     return list(res)
 
-def save_file(x,y,z,fpath):
+def save_tile(x,y,z,fpath):
     """
     Given the tile location (x,y) and zoom level z,
     fetch the corresponding tile from the server and save it
-    to the location specfied in fpath
+    to the location specfied in fpath.
+    Note, this saves just one tile; usually, want to use `positive_dataset` instead.
     Args:
         x,y,z: integers
         fpath: str
@@ -154,37 +206,17 @@ if __name__ == "__main__":
     # with open("/mnt/c/Users/skm/Dropbox/AgileBeat/test.png",'wb') as fh:
     #     fh.write(res.content)
 
-# defunct
-# def sh_creator(geojson, zooms, file_path):
+    # another example, using the simpler but faster approach
+    # that does not use shapely geometry
+    # 1. define and run a query
+    tags_of_interest = ['airfield', 'bunker','barracks', 'checkpoint', 'danger_area', 'naval_base', 'nuclear_explosion_site']
+    GJ = featured_tiles(place="Beijing, China", buffer_size=500000, 
+        tag='military', values = tags_of_interest)
 
-#     """
-#     Create a shell script to download map tiles as .png files
-#     Args:
-#         ** geojson ** a geojson object (basically a JSON object with geometry->coordinates field)
-#         **zooms** - a list of integer between 1 ~ 19
-#         **file_path** - name of output file
-#         returns: None; call for the side effect of creating the shell script
-#     """
-#     if type(zooms) is int: zooms = [zooms]
-#     zooms = sorted(list(set(int(z) for z in zooms)))
-#     if any(zooms < 1 or zooms > 19):
-#         raise ValueError("zoom must be between 1 and 19 (inclusive)")
+    # 2. create files that store the tile coordinates of interest for positive and negative data sets
+    # these files can be sent to download_tiles.sh to actually get the tiles
+    # if you want to keep track of the information, use functions in get_tiles.py instead!
 
-#     features = geojson['elements']
-#     points_list = [f["geometry"]["coordinates"] for f in features]
-#     xyz = list(set([TG.deg2num(p[0],p[1],z) for p in points_list for z in zooms]))
-
-#     urls = [f"https://{random.choice('abc')}.tile.openstreetmap.org/{pt[2]}/{pt[0]}/{pt[1]}.png" for pt in xyz]
-
-#     with open(file_path,'w') as fh:
-#         def fprint(x):
-#             print(x,end = '\n',file = fh)
-
-#         fprint("#!/bin/bash")
-    
-#         for i, u in enumerate(urls):
-#             zC, xC, yC = u.split('/')[-3:] # we only need last 3 elems
-#             lat, lon = TG.num2deg(int(xC), int(yC[:-4]), int(zC) )
-#             fprint(f"wget -O {zC}_{xC}_{yC} {u} #Lat: {lat}, Lon: {lon}")
-#             if i % 50 == 0:
-#                 fprint('sleep 1.1')
+    sh_creator(GJ, zooms=[17,18],
+        positive_file_name = 'mil_Beijing_pos.tsv', 
+        negative_file_name ='mil_Beijing_neg.tsv')
