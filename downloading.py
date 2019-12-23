@@ -17,28 +17,34 @@ if os.getcwd().startswith('/tmp/'):
     sys.path.append("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1") 
 # the other pieces we need to run queries and get tiles
 from utils import deg2num, num2deg
-from processing import process_query
+from query_processing import process_query
 from query_helpers import run_ql_query, atomize_features
 
-def sh_creator(nodes, zooms, positive_file_name, negative_file_name):
+def sh_creator(geo_dict, zooms, positive_file_name, negative_file_name, buffer = 0):
     """
     The function creates outputs (x,y,z) tile coordinate files which can be
     fed into download_tiles.sh in order to get tiles from the OSM server
-    - nodes: list of nodes as returned by atomize_features
+    - geo_dict: an Overpass API query response
+    - nodes: list of nodes as returned by 
     - zooms: zoom levels of tiles to be extracted 
     - positive_file_name: file name with path for positive dataset
     - negative_file_name: file name with path for negative dataset
+    - buffer: if nonzero, any negative tile will be at least this far away from the postive
+      set, measured by L2 distance, ensuring more separation between classes if desired.
     """
+
     if type(zooms) is int:
         zooms = [zooms]
     if any(z < 2 or z > 19 for z in zooms):
         raise ValueError("all zoom levels must be between 2 and 19")
     
+    nodes = atomize_features(geo_dict)
     points_list = [(node['lat'],node['lon']) for node in nodes]
+    pos_DFs, neg_DFs = [], []
 
     for zoom in zooms:   
 
-        xy = [TG.deg2num(x,y,zoom) for x,y in points_list]
+        xy = [deg2num(x,y,zoom) for x,y in points_list]
 
         pos_df = pd.DataFrame.from_records(xy,columns = ['x','y']).drop_duplicates()
         x_min, x_max, y_min, y_max = min(pos_df['x']), max(pos_df['x']), min(pos_df['y']), max(pos_df['y'])
@@ -46,22 +52,47 @@ def sh_creator(nodes, zooms, positive_file_name, negative_file_name):
 
         # get an equal number of 'negative' points which are in the bounding box
         n_pos = pos_df.shape[0]
-        n_in_box = (x_max - x_min + 1) * (y_max - y_min + 1)
+        n_in_box = len(xrng) * len(yrng)
+        # edge case - we sampled a solid rectangle of tiles
+        if n_pos == n_in_box:
+            raise ValueError("sh_creator: positives-only data set!")
         if 2 * n_pos > n_in_box:
             n_neg = n_in_box - n_pos
         else:
             n_neg = n_pos
         
+        pos_xy = set((x,y) for x,y in zip(pos_df['x'],pos_df['y']))
+        XY = np.array(list(pos_xy))
+
+        def min_dist(x,y):
+            dd = np.sum(np.square(XY - (x,y)),axis = 1)
+            return np.sqrt(min(dd))
+
         neg_xy = set()
-        neg_xy.update((x,y) for x,y in zip(random.sample(xrng,n_neg), random.sample(yrng,n_neg)))
         while len(neg_xy) < n_neg:
-            neg_xy.update((x,y) for x,y in zip(random.sample(xrng,n_neg), random.sample(yrng,n_neg)))
+            newx,newy = random.sample(xrng,n_neg), random.sample(yrng,n_neg)
+            nearest_d = [min_dist(x,y) for x,y in zip(newx,newy)]
+            if buffer >= 1:
+                neg_xy.update((x,y) for x,y,d in zip(newx,newy,nearest_d) if d > buffer)
+            else:
+                neg_xy.update((x,y) for x,y in zip(newx,newy) if (x,y) not in pos_xy)
         
-        neg_df = pd.DataFrame.from_records(neg_xy,columns = ['x','y']).head(n_neg)
+        neg_df = pd.DataFrame.from_records(list(neg_xy),columns = ['x','y'])\
+            .head(n_neg)\
+            .sort_values(by = ['x','y'])
         pos_df['z'] = zoom
         neg_df['z'] = zoom
-        pos_df.to_csv(path_or_buf = positive_file_name,sep = '\t',header = False,index = False)
-        neg_df.to_csv(path_or_buf = negative_file_name,sep = '\t',header = False,index = False)
+        pos_DFs.append(pos_df)
+        neg_DFs.append(neg_df)
+    
+    out_pos = pd.concat(pos_DFs,axis = 0)
+    out_neg = pd.concat(neg_DFs,axis = 0)
+    common_row = pd.merge(out_pos,out_neg,on = ['x','y','z']).shape[0]
+    if common_row > 0:
+        raise RuntimeError(f"Somehow there are {common_row} common rows!")
+    print(f"Writing {out_pos.shape[0]} positive and {out_neg.shape[0]} negative samples")
+    out_pos.to_csv(path_or_buf = positive_file_name,sep = '\t',header = False,index = False)
+    out_neg.to_csv(path_or_buf = negative_file_name,sep = '\t',header = False,index = False)
 
 def shell_permission(sh_file_name):
     """
@@ -79,7 +110,7 @@ def find_tile_coords(tile,zoom : int):
         tile: a shapely Polygon (should be a box as returned from process_node, process_way)
         whose vertices are latitude/longitude coordinates
         zoom: level of zoom between 1 and 19
-    Returns: the map coordinates as determined by TileGenerator.deg2num
+    Returns: the map coordinates as determined by .deg2num
     """
     if int(zoom) != zoom or zoom < 1 or zoom > 19:
         raise ValueError(f"zoom should be an integer in [1,19]; got {zoom}")
@@ -132,10 +163,10 @@ def positive_dataset(processed_query,out_dir,namefunc = None):
     file_locs, types, xx, yy, qual, tags = ([],[],[],[],[],[])
     if namefunc is None:
         def namefunc(x,y,z):
-            return f'lat_{x}_lon_{y}_zoom_{z}.png'
+            return f'lat_{y}_lon_{x}_zoom_{z}.png'
     if out_dir.endswith('/'): out_dir = out_dir[:-1]
     if not os.path.exists(out_dir):
-        os.mkdir(out_dir)
+        os.makedirs(out_dir)
     Elems = processed_query['elements']
     z = processed_query['zoom']
     
@@ -168,28 +199,37 @@ def positive_dataset(processed_query,out_dir,namefunc = None):
     #TODO: append to existing if there's already data?
     df.to_csv(path_or_buf = f'{out_dir}/pos_metadata.csv',index = False)
 
+def negative_dataset(processed_query,out_dir,namefunc = None):
+    return
+
 if __name__ == "__main__":
 
-    # TODO: determine tile size from input zoom level
-    # writing unit tests
-    # process_relation function
-    # create a class to structure all the functions?
+    # TODO: 
+    # determine tile size from input zoom level
+    # unit testing?
+    # negative dataset function
 
     # testing:
-    CN_mil = run_ql_query(place = "Madrid, Spain", 
+    ES_mil = run_ql_query(place = "Madrid, Spain", 
         buffersize = 200000, 
         tag = 'military', values = ['airfield','bunker'])
 
-    resp = CN_mil['elements'] # what gets processed by other funcs
-    pw = process_way(resp[1],max_ovp = 0.8)
-    unary_union([p[0] for p in pw])
+    # first approach: take any tile in which any query node appears
+    # as a positive example, and any other tile in the bounding box
+    # as a negative example:
+    # should run the script 'download_tiles.sh' and input
+    # the output file (for positive and negative respectively)
+    os.chdir("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1")
+    sh_creator(ES_mil,[17,18,19],'ES_testpos.tsv','ES_testneg.tsv',buffer = 10)
 
+    # second approach: use Shapely to sample tiles that overlap
+    # with the geometric object, specifying min/max overlap if desired
     qq = process_query(CN_mil,17)
-    spots = calc_map_locations(qq)
 
     positive_dataset(qq,'/mnt/c/Users/skm/Documents/test_picz')
     # the URL composition is defined for tiles in
     # see https://wiki.openstreetmap.org/wiki/Tile_servers
+    # spots = calc_map_locations(qq)
     # out_dir = "/mnt/c/Users/skm/Dropbox/AgileBeat"
     # for x,y in spots:
     #     outF = f"{out_dir}/lat_{x}_lon_{y}_zoom_{z}.png"
@@ -205,18 +245,3 @@ if __name__ == "__main__":
     # print(res.status_code)
     # with open("/mnt/c/Users/skm/Dropbox/AgileBeat/test.png",'wb') as fh:
     #     fh.write(res.content)
-
-    # another example, using the simpler but faster approach
-    # that does not use shapely geometry
-    # 1. define and run a query
-    tags_of_interest = ['airfield', 'bunker','barracks', 'checkpoint', 'danger_area', 'naval_base', 'nuclear_explosion_site']
-    GJ = featured_tiles(place="Beijing, China", buffer_size=500000, 
-        tag='military', values = tags_of_interest)
-
-    # 2. create files that store the tile coordinates of interest for positive and negative data sets
-    # these files can be sent to download_tiles.sh to actually get the tiles
-    # if you want to keep track of the information, use functions in get_tiles.py instead!
-
-    sh_creator(GJ, zooms=[17,18],
-        positive_file_name = 'mil_Beijing_pos.tsv', 
-        negative_file_name ='mil_Beijing_neg.tsv')

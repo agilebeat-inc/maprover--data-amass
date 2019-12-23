@@ -1,3 +1,5 @@
 # any files to ignore
-*.png
+**.png
 __pycache__/*
+**.tsv
+

@@ -1,4 +1,5 @@
 from osmxtract import overpass, location
+from collections import Counter
 
 def run_ql_query(place,tag,values,buffersize = None,case = False,timeout = 25):
     """
@@ -38,7 +39,8 @@ def run_ql_query(place,tag,values,buffersize = None,case = False,timeout = 25):
         'query': query,
         'placename': place if type(place) in (str,int) else None,
         'geolocation': (lat,lon),
-        'bounds': bounds
+        'bounds': bounds,
+        'types': Counter(e['type'] for e in res['elements'])
     }
     return res
     

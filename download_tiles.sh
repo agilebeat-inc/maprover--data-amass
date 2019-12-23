@@ -1,4 +1,4 @@
-#! /usr/env/bash
+#! /usr/bin/env bash
 
 # get tiles from input file
 
@@ -14,12 +14,24 @@ if [[ ! -e "${filename}" ]]; then
     exit 1
 fi
 
-echo "Input file: ${filename}"
-
 srvs=(a b c)
 re='^[0-9]+$'
 i=0
-sleep_freq=2
+sleep_interval=25
+
+echo "Input file: ${filename}"
+
+if [[ $# -gt 1 ]]; then
+    ndl="$2"
+    echo "ndl = ${ndl}"
+    if ! [[ ${ndl} =~ ${re} ]]; then
+        echo "If a second arg is passed, it must be a positive integer"
+        exit 1
+    fi
+else
+    ndl=1000000 # just something very large
+fi
+
 
 while IFS=$'\t'; read -r -a line; do
 
@@ -33,15 +45,18 @@ while IFS=$'\t'; read -r -a line; do
         exit 1
     fi
     ix=$(shuf -i 0-2 -n 1)
-    # echo "Server will be ${srvs[ix]}"
     url="https://${srvs[ix]}.tile.openstreetmap.org/${z}/${x}/${y}.png"
     file="${z}_${x}_${y}.png"
-    # echo "url is: ${url}"
+    
     cmd="wget -O ${file} ${url}"
+    # echo "${i}: ${cmd}"
     eval "${cmd}"
     ((i++))
-    # echo "i = ${i}"
-    if (($i % $sleep_freq == 0)); then
+    if [[ $i -gt ndl ]]; then
+        break
+    fi
+
+    if (($i % $sleep_interval == 0)); then
         echo "zzz..."
         sleep 1.1
     fi

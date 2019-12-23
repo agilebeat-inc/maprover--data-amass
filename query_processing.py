@@ -106,6 +106,17 @@ def process_node(node_dict,tile_size):
     # but overlap is by definition 1 (or 0?) since a node doesn't have area
     return (pt,1)
 
+def is_basically_closed(coords):
+    """
+    Heuristic to determine that the shape is 'basically' closed
+    For some relations, a member with 'outer' role doesn't form a valid polygon
+    """
+    x0,y0 = coords[0]
+    xN,yN = coords[-1]
+    xRng = max(c[0] for c in coords) - min(c[0] for c in coords)
+    yRng = max(c[1] for c in coords) - min(c[1] for c in coords)
+    return abs(x0-xN) < 0.01*xRng and abs(y0-yN) < 0.01*yRng
+
 def process_way(way_dict,**kwargs):
     """
     process an open or closed way, finding a (mutually disjoint) set of tiles
@@ -116,8 +127,16 @@ def process_way(way_dict,**kwargs):
     Returns:
         list of (Shapely.geometry.polygon.Polygon,float) tuples  (tile, overlap)
     """
-    is_closed = way_dict['nodes'][0] == way_dict['nodes'][-1]
+    # way_dict = rel[14]; kwargs = {}
     coords = coord_xy(way_dict['geometry'])
+    if len(coords) < 5: # treat it as node instead?
+        return []
+    if 'nodes' in way_dict:
+        is_closed = way_dict['nodes'][0] == way_dict['nodes'][-1]
+    elif 'role' in way_dict:
+        is_closed = way_dict['role'] == 'outer' and is_basically_closed(coords)
+    else:
+        is_closed = False
     if is_closed:
         poly = geom.Polygon(shell = coords)
     else:
@@ -132,10 +151,18 @@ def process_way(way_dict,**kwargs):
     kwargs['poly'] = poly
     return polygon_tiles(**kwargs)
 
+# rel = qq['elements'][8]['members']
+# for i,rl in enumerate(rel):
+#     print(f"Processing way# {i}")
+#     ts = process_way(rl)
+
 def process_relation(rel_dict,**kwargs):
     res = []
     for mem in rel_dict['members']:
-        res.extend(process_way(mem,kwargs))
+        if mem['type'] == 'way':
+            res.extend(process_way(mem,**kwargs))
+        else: # node
+            res.append(process_node(mem))
     return res
 
 def tile2json(tile):
@@ -171,16 +198,34 @@ def process_query(ovp_query,zoom,max_tiles_per_entity = 25,min_ovp=0,max_ovp=1):
     Returns:
         a geoJSON object whose elements have an added 'tiles' property
     """
-    for elem in ovp_query['elements']:
+    for i,elem in enumerate(ovp_query['elements']):
         etype = elem['type']
         if etype == 'node':
             tiles = [process_node(elem,0.01)] # need to coordinate the size with zooming!
         elif etype == 'way':
-            tiles = process_way(elem,n_tile = max_tiles_per_entity,min_ovp,max_ovp)
+            tiles = process_way(elem,n_tile = max_tiles_per_entity,
+                min_ovp = min_ovp,max_ovp = max_ovp)
         elif etype == 'relation':
-            tiles = process_relation(elem,0.01)
+            tiles = process_relation(elem,min_ovp = 0.01)
         else:
             raise ValueError(f"Should not occur! type is {etype}")
         elem['tiles'] = tiles
     ovp_query['zoom'] = zoom # track @ which zoom it was processed
     return ovp_query
+
+if __name__ == '__main__':
+
+    import os
+    from collections import Counter
+    if os.getcwd().startswith('/tmp/'):
+        os.chdir("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1")
+    from query_helpers import run_ql_query
+    # test that ways and relations are correctly processed:
+    # this query should return 8 ways and 2 relations
+    qq = run_ql_query('San Juan, Puero Rico','landuse',['forest'],10000)
+    rels = [e for e in qq['elements'] if e['type'] == 'relation']
+    qp = process_query(qq,17)
+
+    pw = process_way(qq['elements'][1],max_ovp = 0.8)
+    unary_union([p[0] for p in pw])
+    

@@ -2,11 +2,6 @@ import json
 import math
 import numpy as np
 
-def load_json_file(path):
-    with open(path, 'r') as in_file:
-        gj = json.load(in_file)
-        return gj
-
 def convert_points_along_polyline_to_line_segments(line_segment):
     line_segment.insert(0, [None, None])
     line_segment.append([None, None])
@@ -26,6 +21,13 @@ def deg2num(lat_deg, lon_deg, zoom):
   ytile = (n / 2) * (1.0 - math.asinh(math.tan(lat_rad))/math.pi)
   return (int(xtile), int(ytile))
 
+def num2deg(xtile, ytile, zoom):
+  n = 2.0 ** zoom
+  lon_deg = 360 * xtile / n - 180
+  lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * ytile / n)))
+  lat_deg = math.degrees(lat_rad)
+  return (lat_deg, lon_deg)
+
 # defining the size of tiles (in terms of latitude/longitude)
 # for a given zoom level and (lat,lon)
 # longitude is easy; # tiles is simply 2^z so tile width is 2^-z
@@ -38,20 +40,3 @@ def tile_size(y,zoom):
     width = 2 ** -zoom
     height = num2deg(0,y,zoom)[1]
     return width, height
-
-def num2deg(xtile, ytile, zoom):
-  n = 2.0 ** zoom
-  lon_deg = 360 * xtile / n - 180
-  lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * ytile / n)))
-  lat_deg = math.degrees(lat_rad)
-  return (lat_deg, lon_deg)
-
-def generate_geojson(points):
-    geojson = {'type': 'FeatureCollection', 'features': []}
-    for p in points:
-        feature = {'type': 'Feature',
-                   'properties': {},
-                   'geometry': {'type': 'Point',
-                                'coordinates': [p[0],p[1]]}}
-        geojson['features'].append(feature)
-    return geojson
