@@ -1,14 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # coding: utf-8
 
-# standard modules
 import random
 import os, sys
 import subprocess as sp
 import json
 from time import sleep
 
-# math/data
 import numpy as np
 import pandas as pd
 
