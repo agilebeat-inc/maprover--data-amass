@@ -8,8 +8,8 @@ example of pipeline 1
 """
 
 import os
-if os.getwd().startswith('/tmp/'):
-    os.setwd("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1")
+if os.getcwd().startswith('/tmp/'):
+    os.chdir("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1")
 
 from query_helpers import run_ql_query
 from query_processing import process_query

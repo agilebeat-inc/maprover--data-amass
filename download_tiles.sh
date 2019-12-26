@@ -2,35 +2,59 @@
 
 # get tiles from input file
 
-if [[ $# -eq 0 ]]; then
-    echo "No arguments provided: need a file with x y z coordinates as input"
+
+USAGE="download_tiles.sh --file|-f FILENAME [--outdir|-o DIR] [--numtiles|-n N]"
+
+if [[ $# -lt 2 ]]; then
+    echo "${USAGE}"
     exit 1
 fi
 
-filename="$1"
+filename=""
+outdir="."
+ndl=1000000
+
+while (($#)); do
+    case $1 in
+        --file|-f)
+            shift
+            filename=$1
+            shift
+        ;;
+        --outdir|-d)
+            shift
+            outdir=$1
+            shift
+        ;;
+        --numtiles|-n)
+            shift
+            ndl=$1
+            shift
+        ;;
+        *)
+            shift
+        ;;
+    esac
+done
+
+# chop off trailing /
+fslash='.+/$'
+if [[ "${outdir}" =~ $fslash ]]; then
+    outdir="${outdir::-1}"
+fi
+if [[ ! -d "${outdir}" ]]; then
+    mkdir -p "${outdir}"
+fi
 
 if [[ ! -e "${filename}" ]]; then
     echo "File ${filename} not found!"
     exit 1
 fi
 
-srvs=(a b c)
 re='^[0-9]+$'
+srvs=(a b c)
 i=0
 sleep_interval=25
-
-echo "Input file: ${filename}"
-
-if [[ $# -gt 1 ]]; then
-    ndl="$2"
-    echo "ndl = ${ndl}"
-    if ! [[ ${ndl} =~ ${re} ]]; then
-        echo "If a second arg is passed, it must be a positive integer"
-        exit 1
-    fi
-else
-    ndl=1000000 # just something very large
-fi
 
 
 while IFS=$'\t'; read -r -a line; do
@@ -46,13 +70,13 @@ while IFS=$'\t'; read -r -a line; do
     fi
     ix=$(shuf -i 0-2 -n 1)
     url="https://${srvs[ix]}.tile.openstreetmap.org/${z}/${x}/${y}.png"
-    file="${z}_${x}_${y}.png"
+    file="${outdir}/${z}_${x}_${y}.png"
     
     cmd="wget -O ${file} ${url}"
     # echo "${i}: ${cmd}"
     eval "${cmd}"
     ((i++))
-    if [[ $i -gt ndl ]]; then
+    if [[ $i -gt $ndl ]]; then
         break
     fi
 
@@ -61,3 +85,4 @@ while IFS=$'\t'; read -r -a line; do
         sleep 1.1
     fi
 done < "${filename}"
+
