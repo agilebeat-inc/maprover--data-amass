@@ -27,6 +27,8 @@ ES_mil = run_ql_query(place = "Madrid, Spain",
 os.chdir("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1")
 sh_creator(ES_mil,[17,18,19],'ES_testpos.tsv','ES_testneg.tsv')
 
+subprocess.run("download_tile.sh -f ")
+
 # second approach: use Shapely to sample tiles that overlap
 # with the geometric object, specifying min/max overlap if desired
 qq = process_query(ES_mil,17)

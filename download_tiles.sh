@@ -21,7 +21,7 @@ while (($#)); do
             filename=$1
             shift
         ;;
-        --outdir|-d)
+        --outdir|-o)
             shift
             outdir=$1
             shift
@@ -68,12 +68,17 @@ while IFS=$'\t'; read -r -a line; do
         echo "Non-integer in the input on line ${i}: ${x}, ${y}, ${z}"
         exit 1
     fi
+    
+    file="${outdir}/${z}_${x}_${y}.png"
+    # if the file already exists in this directory, no need to download it
+    if [[ -f "${file}" ]]; then
+        echo "Already have file ${file}!"
+        continue
+    fi
+    
     ix=$(shuf -i 0-2 -n 1)
     url="https://${srvs[ix]}.tile.openstreetmap.org/${z}/${x}/${y}.png"
-    file="${outdir}/${z}_${x}_${y}.png"
-    
-    cmd="wget -O ${file} ${url}"
-    # echo "${i}: ${cmd}"
+    cmd="wget -O \"${file}\" ${url}"
     eval "${cmd}"
     ((i++))
     if [[ $i -gt $ndl ]]; then

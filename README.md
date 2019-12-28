@@ -9,4 +9,8 @@ There are three steps in the 'pipeline', each of which has a separate submodule:
 
 The file `driver.py` has example code showing how the parts work together.
 
+# Dataset organization
 
+After downloading some images, it may be useful to do a little quality control. Especially for negative datasets, there may be (practically) empty images which are not informative for training. The script `post_filtering.py` can automate cleanup of such files; consult its help documentation for details. Basically, we can filter by image size or entropy.
+
+Once we have positive and negative sets of images for a particular query, they should be stored in a consistent way. __TBD__: what is the organizaitional setup for the various sets of trainig tiles.
