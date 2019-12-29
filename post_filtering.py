@@ -8,7 +8,7 @@ from argparse import ArgumentParser
 def working_directory(path):
     """
     A context manager that changes the working directory to the given
-    path, and then changes it back to its previous value on exit.
+    path and reverts to its previous value on exit.
     """
     prev_wd = os.getcwd()
     os.chdir(path)
@@ -63,6 +63,7 @@ def apply_filter(filesdir,imgs,outdir = None):
     """
     with working_directory(filesdir):
         imgs = [e for e in imgs if os.path.exists(e)]
+        print(f"Identified {len(imgs)} files to filter")
         if outdir is None:
             for img in images:
                 os.remove(img)
@@ -75,7 +76,7 @@ def apply_filter(filesdir,imgs,outdir = None):
                 os.rename(img,f"{outdir}/{img}")
 
 ap = ArgumentParser(
-    desc = "filter low-quality or empty files"
+    description = "filter low-quality or empty files"
 )
 ap.add_argument(
     "--dir","-d",required = True,type = str,
@@ -101,7 +102,7 @@ if __name__ == '__main__':
     argz = vars(ap.parse_args())
     
     wkdir = argz['dir']
-    odir = args['outdir']
+    odir = argz['outdir']
     filter1 = filter_size(wkdir,argz['min_size'])
     if argz['min_entropy']:
         filter2 = filter_entropy(wkdir,argz['min_entropy'])
@@ -110,8 +111,8 @@ if __name__ == '__main__':
 
     targets = [e[0] for e in filter1]
     apply_filter(wkdir,targets,odir)
-    # example usage:
     if False:
+        # example usage:
         img_dir = "/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1"
         ff1 = filter_size(img_dir,1250)
         ff2 = filter_entropy(img_dir,25)

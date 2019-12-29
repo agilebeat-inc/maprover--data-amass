@@ -47,7 +47,7 @@ if [[ ! -d "${outdir}" ]]; then
 fi
 
 if [[ ! -e "${filename}" ]]; then
-    echo "File ${filename} not found!"
+    >&2 echo "File ${filename} not found!"
     exit 1
 fi
 
@@ -65,7 +65,7 @@ while IFS=$'\t'; read -r -a line; do
     y=${line[1]}
     z=$(echo ${line[2]} | tr -d '\r') # in case there are evil carriage returns
     if ! [[ ${x} =~ ${re} ]] || ! [[ ${y} =~ ${re} ]] || ! [[ ${z} =~ ${re} ]]; then
-        echo "Non-integer in the input on line ${i}: ${x}, ${y}, ${z}"
+        >&2 echo "Non-integer in the input on line ${i}: ${x}, ${y}, ${z}"
         exit 1
     fi
     
@@ -78,8 +78,15 @@ while IFS=$'\t'; read -r -a line; do
     
     ix=$(shuf -i 0-2 -n 1)
     url="https://${srvs[ix]}.tile.openstreetmap.org/${z}/${x}/${y}.png"
-    cmd="wget -O \"${file}\" ${url}"
-    eval "${cmd}"
+    # wget -O "${file}" ${url}
+    curl ${url} --output "${file}" --silent
+    rv=$?
+    if [[ $rv -gt 0 ]]; then
+        >&2 echo "Failed on URL ${url} with code ${rv}"
+        echo ${url} >> failed.txt
+    else
+        echo "Saved file #$i: ${file}"
+    fi
     ((i++))
     if [[ $i -gt $ndl ]]; then
         break
