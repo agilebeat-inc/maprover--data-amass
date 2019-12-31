@@ -56,6 +56,7 @@ srvs=(a b c)
 i=0
 sleep_interval=25
 
+num_tiles=$(wc -l ${filename} | cut -d " " -f1)
 
 while IFS=$'\t'; read -r -a line; do
 
@@ -69,6 +70,7 @@ while IFS=$'\t'; read -r -a line; do
         exit 1
     fi
     
+    ((i++))
     file="${outdir}/${z}_${x}_${y}.png"
     # if the file already exists in this directory, no need to download it
     if [[ -f "${file}" ]]; then
@@ -78,16 +80,15 @@ while IFS=$'\t'; read -r -a line; do
     
     ix=$(shuf -i 0-2 -n 1)
     url="https://${srvs[ix]}.tile.openstreetmap.org/${z}/${x}/${y}.png"
-    # wget -O "${file}" ${url}
+
     curl ${url} --output "${file}" --silent
     rv=$?
     if [[ $rv -gt 0 ]]; then
         >&2 echo "Failed on URL ${url} with code ${rv}"
-        echo ${url} >> failed.txt
+        echo ${url} >> "${outdir}/failed.txt" # should this go in same place as output directory?
     else
-        echo "Saved file #$i: ${file}"
+        echo "($i of $num_tiles): ${file}"
     fi
-    ((i++))
     if [[ $i -gt $ndl ]]; then
         break
     fi

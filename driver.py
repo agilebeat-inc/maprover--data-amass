@@ -12,7 +12,7 @@ if os.getcwd().startswith('/tmp/'):
     os.chdir("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1")
 
 from query_helpers import run_ql_query
-from query_processing import process_query
+# from query_processing import process_query
 from downloading import sh_creator, positive_dataset, negative_dataset
 
 # first approach: take any tile in which any query node appears
@@ -24,15 +24,14 @@ ES_mil = run_ql_query(place = "Madrid, Spain",
     buffersize = 200000, 
     tag = 'military', values = ['airfield','bunker'])
 
-os.chdir("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1")
 sh_creator(ES_mil,[17,18,19],'ES_testpos.tsv','ES_testneg.tsv')
 
-subprocess.run("download_tile.sh -f ")
+
 
 # second approach: use Shapely to sample tiles that overlap
 # with the geometric object, specifying min/max overlap if desired
-qq = process_query(ES_mil,17)
+# qq = process_query(ES_mil,17)
 # spots = calc_map_locations(qq)
 
-positive_dataset(qq,'/mnt/c/Users/skm/Documents/test_picz')
-negative_dataset(qq,'/mnt/c/Users/skm/Documents/test_picz')
+# positive_dataset(qq,'/mnt/c/Users/skm/Documents/test_picz')
+# negative_dataset(qq,'/mnt/c/Users/skm/Documents/test_picz')
