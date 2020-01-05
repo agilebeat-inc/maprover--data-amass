@@ -1,5 +1,9 @@
 # any files to ignore
 **.png
-__pycache__/*
 **.tsv
+# detritus from package building
+dist/*
+build/*
+**/__pycache__/*
+**.egg-info
 

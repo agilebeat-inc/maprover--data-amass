@@ -151,11 +151,6 @@ def process_way(way_dict,**kwargs):
     kwargs['poly'] = poly
     return polygon_tiles(**kwargs)
 
-# rel = qq['elements'][8]['members']
-# for i,rl in enumerate(rel):
-#     print(f"Processing way# {i}")
-#     ts = process_way(rl)
-
 def process_relation(rel_dict,**kwargs):
     res = []
     for mem in rel_dict['members']:
@@ -196,7 +191,7 @@ def process_query(ovp_query,zoom,max_tiles_per_entity = 25,min_ovp=0,max_ovp=1):
         max_ovp: maximum intersection between tile and polygon to be included in the result;
         set to anything < 1 if tiles on the interior of a polygon are not wanted
     Returns:
-        a geoJSON object whose elements have an added 'tiles' property
+        a geoJSON-like object whose elements have an added 'tiles' property
     """
     for i,elem in enumerate(ovp_query['elements']):
         etype = elem['type']

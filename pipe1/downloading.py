@@ -10,25 +10,25 @@ from time import sleep
 import numpy as np
 import pandas as pd
 
-# hackery when using in vscode interactive
-if os.getcwd().startswith('/tmp/'):
-    sys.path.append("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1") 
 # the other pieces we need to run queries and get tiles
-from utils import deg2num, num2deg
-from query_processing import process_query
-from query_helpers import run_ql_query, atomize_features
+from .utils import deg2num, num2deg
+from .query_processing import process_query
+from .query_helpers import atomize_features
 
 def sh_creator(geo_dict, zooms, positive_file_name, negative_file_name, buffer = 0):
     """
-    The function creates outputs (x,y,z) tile coordinate files which can be
-    fed into download_tiles.sh in order to get tiles from the OSM server
-    - geo_dict: an Overpass API query response
-    - nodes: list of nodes as returned by 
-    - zooms: zoom levels of tiles to be extracted 
-    - positive_file_name: file name with path for positive dataset
-    - negative_file_name: file name with path for negative dataset
-    - buffer: if nonzero, any negative tile will be at least this far away from the postive
-      set, measured by L2 distance, ensuring more separation between classes if desired.
+    This function creates outputs (x,y,z) tile coordinate files which can be
+    fed into download_tiles.sh in order to get tiles from the OSM server.
+
+    Args:
+        geo_dict: an Overpass API query response
+        zooms: zoom levels of tiles to be extracted 
+        positive_file_name: file name with path for positive dataset
+        negative_file_name: file name with path for negative dataset
+        buffer: if nonzero, any negative tile will be at least this far away from the postive
+        set, measured by L2 distance, ensuring more separation between classes if desired.
+    
+    Returns: None, called for the side-effect of creating the files `positive_file_name` and `negative_file_name`.
     """
 
     if type(zooms) is int:
@@ -206,6 +206,7 @@ if __name__ == "__main__":
     # determine tile size from input zoom level
     # unit testing?
     # negative dataset function
+    from .query_helpers import run_ql_query
 
     # testing:
     ES_mil = run_ql_query(place = "Madrid, Spain", 

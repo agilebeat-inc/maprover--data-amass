@@ -75,30 +75,30 @@ def apply_filter(filesdir,imgs,outdir = None):
                 img = img.split('/')[-1]
                 os.rename(img,f"{outdir}/{img}")
 
-ap = ArgumentParser(
-    description = "filter low-quality or empty files"
-)
-ap.add_argument(
-    "--dir","-d",required = True,type = str,
-    help = "The directory where the images reside"
-)
-ap.add_argument(
-    "--min_size","-m",required = True,type = int,
-    help = "The file size in bytes (anything smaller is (re)moved)"
-)
-ap.add_argument(
-    "--min_entropy","-e",required = False,
-    type = float,nargs = '?',default = None,
-    help = "(optional) - the min. entropy to keep the image"
-)
-ap.add_argument(
-    "--outdir","-o",required = False,
-    type = str,nargs = '?',default = None,
-    help = "Destination directory for failed images (they're deleted if this option is not specified)"
-)
 
 if __name__ == '__main__':
-    
+
+    ap = ArgumentParser(
+    description = "filter low-quality or empty files"
+    )
+    ap.add_argument(
+        "--dir","-d",required = True,type = str,
+        help = "The directory where the images reside"
+    )
+    ap.add_argument(
+        "--min_size","-m",required = True,type = int,
+        help = "The file size in bytes (anything smaller is (re)moved)"
+    )
+    ap.add_argument(
+        "--min_entropy","-e",required = False,
+        type = float,nargs = '?',default = None,
+        help = "(optional) - the min. entropy to keep the image"
+    )
+    ap.add_argument(
+        "--outdir","-o",required = False,
+        type = str,nargs = '?',default = None,
+        help = "Destination directory for failed images (they're deleted if this option is not specified)"
+    )    
     argz = vars(ap.parse_args())
     
     wkdir = argz['dir']
