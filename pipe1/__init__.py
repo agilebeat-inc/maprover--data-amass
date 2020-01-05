@@ -6,4 +6,4 @@ from .query_processing import process_query # in development!
 
 __all__ = ['run_ql_query','sh_creator','filter_size','filter_entropy','apply_filter','process_query']
 
-# __version__ = "0.0.2"
+__version__ = "0.0.2" # does not get exported into package namespace by setup.py

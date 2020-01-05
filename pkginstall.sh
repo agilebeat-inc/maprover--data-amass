@@ -5,7 +5,7 @@ if ! [[ -d 'pipe1' ]]; then
     exit 1
 fi
 
-# remove any existing 'dist' files if there are old versions:
+# remove any existing 'dist' files in case there are old versions:
 if [[ -d 'dist' ]]; then
     rm -r ./dist
 fi
@@ -17,7 +17,7 @@ if [[ ${res} -ne 0 ]]; then
     exit 1
 fi
 
-# if the package was previously installed, we don't want to re-install dependencies
+# if the package is currently installed, we don't want to re-install dependencies
 # but we do want to re-install if this command has been run
 pip3 show pipe1 > /dev/null
 

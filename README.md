@@ -3,7 +3,7 @@
 This pipeline provides utilities to get sets of OpenStreetMap tiles which overlap (or don't) instances of certain features of interest.
 
 There are three steps in the 'pipeline', each of which has a separate submodule:
-1. creating a query that gets items of interest in a specific geographical region.  `run_ql_query` in `query_helpers.py` handles this part, and its return value is used in the other steps
+1. creating a query that gets items of interest in a specific geographical region. `run_ql_query` in `query_helpers.py` handles this part, and its return value is used in the other steps
 2. Given the query results of step 1, find OSM tiles corresponding to the query elements. There are two approaches, `sh_creator` in `downloading.py` is simpler but faster; the second approach is documented in `query_processing.py` and uses Shapely. The latter should be more configurable but the tile conversion is still in progress and currently imperfect. 
 3. Having identified a set of tiles, download them. There are currently two implementations corresponding to the differences in step 2; perhaps this should get redone. In the first case, running `sh_creator` will create two tab-delimited output files for the positive and negative datasets respectively. These just contain the tile coordinates data and should be input as the `--file` or `-f` argument to `download_tiles.sh`. That script does the actual downloading along with some basic error checking.
 
@@ -18,6 +18,10 @@ The `-n 500` in the latter command restricts the download to the first 500 tiles
 
 The file `driver.py` has example code showing how the parts work together.
 
+## Installation
+
+Run the script `pkginstall.sh` to install the pipeline-1 code as a Python module (this helps avoid tricky file-path issues).
+
 ## Dataset organization
 
 After downloading some images, it may be useful to do a little quality control. Especially for negative datasets, there may be (practically) empty images which are not informative for training. The script `post_filtering.py` can automate cleanup of such files; consult its help documentation for details. Basically, we can filter by image size or entropy.
@@ -31,10 +35,9 @@ Here is an example showing all the steps:
 First, run a Python script similar to what's in `driver.py`. Say we want to find the beaches within 25000 meters of Thessaloniki:
 
 ```python
-from query_helpers import run_ql_query
-from downloading import sh_creator
+import pipe1
 
-Thessaloniki_beaches = run_ql_query(
+Thessaloniki_beaches = pipe1.run_ql_query(
     place = "Thessaloniki",buffersize = 25000,
     tag = 'natural',values = ['beach']
 )
@@ -42,7 +45,7 @@ Thessaloniki_beaches = run_ql_query(
 print(Thessaloniki_beaches['query_info'])
 # now call sh_creator to output the 'positive' and 'negative' training sets
 zoom_levels = [18,19]
-sh_creator(Thessaloniki_beaches,zoom_levels,'is_beach.tsv','not_beach.tsv')
+pipe1.sh_creator(Thessaloniki_beaches,zoom_levels,'is_beach.tsv','not_beach.tsv')
 ```
 
 Now, to download the tiles we can run the bash script `download_tiles.sh` with each input (making sure to save the images in different output directories):
@@ -63,3 +66,5 @@ python3 post_filtering.py --dir=./thessa_not_beach --min_size=600 -o=junk
 ```
 
 This moves all tiles whose file size is less than 600 bytes into a subdirectory `junk` so that they can be easily ignored when the training tiles get read in to other programs.
+
+We could have also done all of this from within a single Python script; again, see the `driver.py` code.
