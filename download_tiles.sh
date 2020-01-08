@@ -71,6 +71,9 @@ while IFS=$'\t'; read -r -a line; do
     fi
     
     ((i++))
+    if [[ $i -gt $ndl ]]; then
+        break
+    fi
     file="${outdir}/${z}_${x}_${y}.png"
     # if the file already exists in this directory, no need to download it
     if [[ -f "${file}" ]]; then
@@ -88,9 +91,6 @@ while IFS=$'\t'; read -r -a line; do
         echo ${url} >> "${outdir}/failed.txt" # should this go in same place as output directory?
     else
         echo "($i of $num_tiles): ${file}"
-    fi
-    if [[ $i -gt $ndl ]]; then
-        break
     fi
 
     if (($i % $sleep_interval == 0)); then

@@ -21,14 +21,18 @@ ES_mil = pipe1.run_ql_query(
 
 pos_file, neg_file = 'ES_mil_pos.tsv', 'ES_mil_neg.tsv'
 pdir, ndir = pos_file.split('.')[0], neg_file.split('.')[0]
-max_tiles = 1000
+max_tiles = 10 # just testing
 
 # create the xyz tile 'database':
+# import os
+# os.chdir('/mnt/c/Users/skm/Dropbox/AgileBeat')
 pipe1.sh_creator(ES_mil,[17,18,19],pos_file,neg_file)
 
 # running the shell commands:
 import subprocess as sp
 
+# note that we need to change the working directory or 
+# supply the path to the download_tiles script
 sp.run(f"bash download_tiles.sh -f {pos_file} -o {pdir} -n {max_tiles}",shell = True)
 sp.run(f"bash download_tiles.sh -f {neg_file} -o {ndir} -n {max_tiles}",shell = True)
 

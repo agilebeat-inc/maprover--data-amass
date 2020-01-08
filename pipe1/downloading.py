@@ -85,6 +85,13 @@ def sh_creator(geo_dict, zooms, positive_file_name, negative_file_name, buffer =
     
     out_pos = pd.concat(pos_DFs,axis = 0)
     out_neg = pd.concat(neg_DFs,axis = 0)
+    # add back the longitude/latitude coordinates
+    LLpos = [num2deg(x,y,z) for x,y,z in zip(out_pos['x'],out_pos['y'],out_pos['z'])]
+    LLneg = [num2deg(x,y,z) for x,y,z in zip(out_pos['x'],out_pos['y'],out_pos['z'])]
+    out_pos['latitude'] = [e[0] for e in LLpos]
+    out_pos['longitude'] = [e[1] for e in LLpos]
+    out_neg['latitude'] = [e[0] for e in LLneg]
+    out_neg['longitude'] = [e[1] for e in LLneg]
     common_row = pd.merge(out_pos,out_neg,on = ['x','y','z']).shape[0]
     if common_row > 0:
         raise RuntimeError(f"Somehow there are {common_row} common rows!")

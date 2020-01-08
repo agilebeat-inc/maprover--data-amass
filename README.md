@@ -51,7 +51,7 @@ pipe1.sh_creator(Thessaloniki_beaches,zoom_levels,'is_beach.tsv','not_beach.tsv'
 Now, to download the tiles we can run the bash script `download_tiles.sh` with each input (making sure to save the images in different output directories):
 
 ```bash
-./download_tiles.sh --file is_beach.tsv --output ./thessa_beach
+./download_tiles.sh --file is_beach.tsv --outdir ./thessa_beach
 ./download_tiles.sh -f not_beach.tsv -o ./thessa_not_beach -n 200
 ```
 
