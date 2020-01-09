@@ -2,8 +2,7 @@
 
 # get tiles from input file
 
-
-USAGE="download_tiles.sh --file|-f FILENAME [--outdir|-o DIR] [--numtiles|-n N]"
+USAGE="download_tiles --file|-f FILENAME [--outdir|-o DIR] [--numtiles|-n N]"
 
 if [[ $# -lt 2 ]]; then
     echo "${USAGE}"
@@ -37,6 +36,11 @@ while (($#)); do
     esac
 done
 
+if [[ ! -e "${filename}" ]]; then
+    >&2 echo "File ${filename} not found!"
+    exit 1
+fi
+
 # chop off trailing /
 fslash='.+/$'
 if [[ "${outdir}" =~ $fslash ]]; then
@@ -44,11 +48,6 @@ if [[ "${outdir}" =~ $fslash ]]; then
 fi
 if [[ ! -d "${outdir}" ]]; then
     mkdir -p "${outdir}"
-fi
-
-if [[ ! -e "${filename}" ]]; then
-    >&2 echo "File ${filename} not found!"
-    exit 1
 fi
 
 re='^[0-9]+$'

@@ -12,6 +12,7 @@ setup(
     author_email = "scott.marchese@agilebeat.com",
     url = "https://github.com/agilebeat-inc/pipeline-1",
     packages = ['pipe1'],
+    scripts = ['bin/download_tiles'],
     python_requires = '>=3.6',
     install_requires = [
         'numpy >= 1.17','pandas >= 0.25','shapely >= 1.6',

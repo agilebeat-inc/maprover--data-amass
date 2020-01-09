@@ -14,7 +14,8 @@ fi
 res=$(python3 setup.py sdist)
 
 if [[ ${res} -ne 0 ]]; then
-    exit 1
+    >&2 echo "Error code ${res} in setup.py run!"
+    exit ${res}
 fi
 
 # if the package is currently installed, we don't want to re-install dependencies
@@ -27,9 +28,4 @@ if [[ $? -eq 0 ]]; then
 else
     echo "Installing pipe1 for the first time!"
     pip3 install ./dist/*.gz
-fi
-
-# clean up the 'build' file (may not be necessary with 'sdist')
-if [[ -d 'build' ]]; then
-    rm -r  ./build
 fi
