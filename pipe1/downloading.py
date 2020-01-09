@@ -96,8 +96,8 @@ def sh_creator(geo_dict, zooms, positive_file_name, negative_file_name, buffer =
     if common_row > 0:
         raise RuntimeError(f"Somehow there are {common_row} common rows!")
     print(f"Writing {out_pos.shape[0]} positive and {out_neg.shape[0]} negative samples")
-    out_pos.to_csv(path_or_buf = positive_file_name,sep = '\t',header = False,index = False)
-    out_neg.to_csv(path_or_buf = negative_file_name,sep = '\t',header = False,index = False)
+    out_pos.to_csv(path_or_buf = positive_file_name,sep = '\t',header = True,index = False)
+    out_neg.to_csv(path_or_buf = negative_file_name,sep = '\t',header = True,index = False)
 
 def shell_permission(sh_file_name):
     """

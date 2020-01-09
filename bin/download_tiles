@@ -65,6 +65,9 @@ while IFS=$'\t'; read -r -a line; do
     y=${line[1]}
     z=$(echo ${line[2]} | tr -d '\r') # in case there are evil carriage returns
     if ! [[ ${x} =~ ${re} ]] || ! [[ ${y} =~ ${re} ]] || ! [[ ${z} =~ ${re} ]]; then
+        if (( $i == 0 )); then # allow for a header of column names without failing
+            continue
+        fi
         >&2 echo "Non-integer in the input on line ${i}: ${x}, ${y}, ${z}"
         exit 1
     fi

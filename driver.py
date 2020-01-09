@@ -24,8 +24,9 @@ pdir, ndir = pos_file.split('.')[0], neg_file.split('.')[0]
 max_tiles = 10 # just testing
 
 # create the xyz tile 'database':
-# import os
-# os.chdir('/mnt/c/Users/skm/Dropbox/AgileBeat')
+import os
+os.chdir('/mnt/c/Users/skm/Dropbox/AgileBeat')
+
 pipe1.sh_creator(ES_mil,[17,18,19],pos_file,neg_file)
 
 # running the shell commands:
