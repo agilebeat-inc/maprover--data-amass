@@ -19,24 +19,32 @@ ES_mil = pipe1.run_ql_query(
     tag = 'military', values = ['airfield','bunker']
 )
 
-pos_file, neg_file = 'ES_mil_pos.tsv', 'ES_mil_neg.tsv'
-pdir, ndir = pos_file.split('.')[0], neg_file.split('.')[0]
+
+# create positive and negative tile sets:
+dfs = pipe1.create_tileset(ES_mil,[17,18,19],buffer = 5)
+# PUT YOUR OWN DIRECTORY HERE:
+basedir = '/mnt/c/Users/skm/Dropbox/AgileBeat'
+pdir, ndir = basedir + '/testpos', basedir + '/testneg'
 max_tiles = 10 # just testing
 
-# create the xyz tile 'database':
-import os
-os.chdir('/mnt/c/Users/skm/Dropbox/AgileBeat')
-
-pipe1.sh_creator(ES_mil,[17,18,19],pos_file,neg_file)
-
-# running the shell commands:
-import subprocess as sp
-
-# note that we need to change the working directory or 
-# supply the path to the download_tiles script
-sp.run(f"bash download_tiles.sh -f {pos_file} -o {pdir} -n {max_tiles}",shell = True)
-sp.run(f"bash download_tiles.sh -f {neg_file} -o {ndir} -n {max_tiles}",shell = True)
-
+# now we can download the tiles:
+pipe1.save_tiles(dfs['positive'].head(max_tiles),pdir)
+pipe1.save_tiles(dfs['negative'].head(max_tiles),ndir)
+# may also want to save the data sets:
+# can always still use download_tiles shell script to
+# get tiles from this file at a later time
+dfs['positive'].to_csv(
+    path_or_buf = pdir + '/tile_info.tsv',
+    sep = '\t',
+    header = True,
+    index = False
+)
+dfs['negative'].to_csv(
+    path_or_buf = ndir + '/tile_info.tsv',
+    sep = '\t',
+    header = True,
+    index = False
+)
 # optional: filter out empty tiles in negative data set
 empty_imgs = pipe1.filter_size(ndir,650)
 pipe1.apply_filter(ndir,[e[0] for e in empty_imgs],'junk')

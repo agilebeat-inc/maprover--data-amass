@@ -6,6 +6,7 @@ import os, sys
 import subprocess as sp
 import json
 from time import sleep
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,65 @@ from .utils import deg2num, num2deg
 from .query_processing import process_query
 from .query_helpers import atomize_features
 
-def sh_creator(geo_dict, zooms, positive_file_name, negative_file_name, buffer = 0):
+def sample_complement(xx,yy,n,buffer = 0):
+    """ 
+    Take a sample from the bounding box of the elements in xx and yy.
+    The pairs [(x,y) for x,y in zip(xx,yy)] are not included in the sample;
+    we are sampling from the complement of such elements.
+    Args:
+        xx: iterable of ints or other discrete elements
+        yy: iterable of ints or other discrete elements
+        n: number of items sampled from the complement of Cartesian product of xx and yy
+        buffer: int; if positive, each element in the sample must be at least this far away
+        from a 'positive' element
+    Returns:
+        tuple newx,newy which are lists of items of the same type as xx and yy
+    Raises:
+        ValueError for a few edge cases
+    """
+
+    n_pos = len(xx)
+    if len(yy) != n_pos:
+        msg = f"sample_complement: lengths of {xx} and {yy} must match!"
+        raise ValueError(msg)
+    x_min, x_max, y_min, y_max = min(xx), max(xx), min(yy), max(yy)
+    xrng, yrng = range(x_min, x_max+1), range(y_min,y_max+1)
+
+    # get an equal number of 'negative' points which are in the bounding box
+    n_in_box = len(xrng) * len(yrng)
+    print(f"{n_pos} positive tiles; {n_in_box} tiles in area")
+    # edge case - we sampled a solid rectangle of tiles
+    if n_pos >= n_in_box:
+        msg = f"sh_creator: {n_pos} positive tiles and {n_in_box} total tiles!"
+        raise ValueError(msg)
+    n_neg = min(n_in_box - n_pos,n)
+    
+    pos_xy = set((x,y) for x,y in zip(xx,yy))
+    XY = np.array(list(pos_xy))
+
+    def min_dist(x,y):
+        dd = np.sum(np.square(XY - (x,y)),axis = 1)
+        return np.sqrt(min(dd))
+
+    rng = np.random.default_rng()
+    neg_xy = set()
+    # if the buffer is large, there may not be enough tiles
+    # but its not possible to calculate beforehand
+    tries = 0 
+    while len(neg_xy) < n_neg:
+        tries += 1
+        if tries > 5: break
+        newx = rng.integers(x_min,x_max,n_neg,endpoint=True)
+        newy = rng.integers(y_min,y_max,n_neg,endpoint=True)
+        nearest_d = [min_dist(x,y) for x,y in zip(newx,newy)]
+        if buffer >= 1:
+            neg_xy.update((x,y) for x,y,d in zip(newx,newy,nearest_d) if d > buffer)
+        else:
+            neg_xy.update((x,y) for x,y in zip(newx,newy) if (x,y) not in pos_xy)
+    neg_xy = list(neg_xy)[:n_neg]
+    return [e[0] for e in neg_xy], [e[1] for e in neg_xy]
+
+def create_tileset(geo_dict, zooms, buffer = 0):
     """
     This function creates outputs (x,y,z) tile coordinate files which can be
     fed into download_tiles.sh in order to get tiles from the OSM server.
@@ -23,12 +82,10 @@ def sh_creator(geo_dict, zooms, positive_file_name, negative_file_name, buffer =
     Args:
         geo_dict: an Overpass API query response
         zooms: zoom levels of tiles to be extracted 
-        positive_file_name: file name with path for positive dataset
-        negative_file_name: file name with path for negative dataset
         buffer: if nonzero, any negative tile will be at least this far away from the postive
         set, measured by L2 distance, ensuring more separation between classes if desired.
     
-    Returns: None, called for the side-effect of creating the files `positive_file_name` and `negative_file_name`.
+    Returns: dict with two items: 'positive' and 'negative'; both are pandas.DataFrame
     """
 
     if type(zooms) is int:
@@ -43,41 +100,10 @@ def sh_creator(geo_dict, zooms, positive_file_name, negative_file_name, buffer =
     for zoom in zooms:   
 
         xy = [deg2num(x,y,zoom) for x,y in points_list]
-
         pos_df = pd.DataFrame.from_records(xy,columns = ['x','y']).drop_duplicates()
-        x_min, x_max, y_min, y_max = min(pos_df['x']), max(pos_df['x']), min(pos_df['y']), max(pos_df['y'])
-        xrng, yrng = range(x_min, x_max+1), range(y_min,y_max+1)
-
-        # get an equal number of 'negative' points which are in the bounding box
-        n_pos = pos_df.shape[0]
-        n_in_box = len(xrng) * len(yrng)
-        # edge case - we sampled a solid rectangle of tiles
-        if n_pos == n_in_box:
-            raise ValueError("sh_creator: positives-only data set!")
-        if 2 * n_pos > n_in_box:
-            n_neg = n_in_box - n_pos
-        else:
-            n_neg = n_pos
-        
-        pos_xy = set((x,y) for x,y in zip(pos_df['x'],pos_df['y']))
-        XY = np.array(list(pos_xy))
-
-        def min_dist(x,y):
-            dd = np.sum(np.square(XY - (x,y)),axis = 1)
-            return np.sqrt(min(dd))
-
-        neg_xy = set()
-        while len(neg_xy) < n_neg:
-            newx,newy = random.sample(xrng,n_neg), random.sample(yrng,n_neg)
-            nearest_d = [min_dist(x,y) for x,y in zip(newx,newy)]
-            if buffer >= 1:
-                neg_xy.update((x,y) for x,y,d in zip(newx,newy,nearest_d) if d > buffer)
-            else:
-                neg_xy.update((x,y) for x,y in zip(newx,newy) if (x,y) not in pos_xy)
-        
-        neg_df = pd.DataFrame.from_records(list(neg_xy),columns = ['x','y'])\
-            .head(n_neg)\
-            .sort_values(by = ['x','y'])
+        n_neg = pos_df.shape[0]
+        neg_x, neg_y = sample_complement(pos_df['x'],pos_df['y'],n_neg,buffer)
+        neg_df = pd.DataFrame({'x': neg_x,'y': neg_y}).sort_values(by = ['x','y'])
         pos_df['z'] = zoom
         neg_df['z'] = zoom
         pos_DFs.append(pos_df)
@@ -87,7 +113,7 @@ def sh_creator(geo_dict, zooms, positive_file_name, negative_file_name, buffer =
     out_neg = pd.concat(neg_DFs,axis = 0)
     # add back the longitude/latitude coordinates
     LLpos = [num2deg(x,y,z) for x,y,z in zip(out_pos['x'],out_pos['y'],out_pos['z'])]
-    LLneg = [num2deg(x,y,z) for x,y,z in zip(out_pos['x'],out_pos['y'],out_pos['z'])]
+    LLneg = [num2deg(x,y,z) for x,y,z in zip(out_neg['x'],out_neg['y'],out_neg['z'])]
     out_pos['latitude'] = [e[0] for e in LLpos]
     out_pos['longitude'] = [e[1] for e in LLpos]
     out_neg['latitude'] = [e[0] for e in LLneg]
@@ -95,17 +121,53 @@ def sh_creator(geo_dict, zooms, positive_file_name, negative_file_name, buffer =
     common_row = pd.merge(out_pos,out_neg,on = ['x','y','z']).shape[0]
     if common_row > 0:
         raise RuntimeError(f"Somehow there are {common_row} common rows!")
-    print(f"Writing {out_pos.shape[0]} positive and {out_neg.shape[0]} negative samples")
-    out_pos.to_csv(path_or_buf = positive_file_name,sep = '\t',header = True,index = False)
-    out_neg.to_csv(path_or_buf = negative_file_name,sep = '\t',header = True,index = False)
+    return {'positive': out_pos, 'negative': out_neg }
 
-def shell_permission(sh_file_name):
+def save_tile(x,y,z,fpath):
     """
-    This function gives permission to created shell scripts
-    - sh_file_name: a string. List of .sh file names separated by space
+    Given the tile location (x,y) and zoom level z,
+    fetch the corresponding tile from the server and save it
+    to the location specfied in fpath.
+    Note, this saves just one tile; usually, want to use `positive_dataset` instead.
+    Args:
+        x,y,z: integers
+        fpath: str
+    Returns: int, 0 if successful and 1 otherwise
     """
-    temp = subprocess.Popen(["chmod", "755", sh_file_name], stdout = subprocess.PIPE)
-    data = subprocess.Popen(["ls", '-l', sh_file_name], stdout = subprocess.PIPE) 
+    url = f"https://{random.choice('abc')}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    cmd = f"wget -O {fpath} {url}"
+    try:
+        res = sp.run(cmd,shell = True,stdout = sp.PIPE,stderr = sp.STDOUT)
+        return 0
+    except Exception as e:
+        print(f"Error getting tile: {e}")
+        return 1
+
+def save_tiles(df,output_dir):
+    """
+    Save the tiles whose coordinates are in the input DataFrame,
+    defined by columns x, y, and z
+    Args:
+        df: pandas.DataFrame (created by `create_tileset` function)
+        output_dir: directory where the .png files should be stored
+    Returns:
+        None, called for side-effect of downloading tiles
+    """
+    if not isinstance(df,pd.core.frame.DataFrame):
+        raise TypeError("df must be a pandas DataFrame!")
+    if any(e not in df.columns for e in ('x','y','z')):
+        raise ValueError("df must have columns x, y, and z")
+    if output_dir.endswith('/'): output_dir = output_dir[:-1]
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    i, L = 0, df.shape[0]
+    for x,y,z in zip(df['x'],df['y'],df['z']):
+        i += 1
+        print(f"({i} of {L})...")
+        if i % 50 is 0:
+            print('zzz')
+            sleep(1.33)
+        tile_name = f"{x}_{y}_{z}.png"
+        save_tile(x,y,z,output_dir + '/' + tile_name)
 
 def find_tile_coords(tile,zoom : int):
     """
@@ -132,28 +194,6 @@ def calc_map_locations(processed_query):
     for elem in processed_query['elements']:
         res.update(find_tile_coords(tile[0],z) for tile in elem['tiles'])
     return list(res)
-
-def save_tile(x,y,z,fpath):
-    """
-    Given the tile location (x,y) and zoom level z,
-    fetch the corresponding tile from the server and save it
-    to the location specfied in fpath.
-    Note, this saves just one tile; usually, want to use `positive_dataset` instead.
-    Args:
-        x,y,z: integers
-        fpath: str
-    Returns: int, 0 if successful and 1 otherwise
-    """
-    url = f"https://{random.choice('abc')}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-    # fix to run without shell=True - does it matter?
-    # cmds = ["wget", f"-O {fpath}", f"{url}"]
-    cmds = f"wget -O {fpath} {url}"
-    try:
-        res = sp.run(cmds,shell = True,stdout = sp.PIPE,stderr = sp.STDOUT)
-        return 0
-    except Error as e:
-        print(f"Error getting tile: {e}")
-        return 1
 
 def positive_dataset(processed_query,out_dir,namefunc = None):
     """
@@ -205,49 +245,5 @@ def positive_dataset(processed_query,out_dir,namefunc = None):
     df.to_csv(path_or_buf = f'{out_dir}/pos_metadata.csv',index = False)
 
 def negative_dataset(processed_query,out_dir,namefunc = None):
-    return
+    raise NotImplementedError("It is not implemented!")
 
-if __name__ == "__main__":
-
-    # TODO: 
-    # determine tile size from input zoom level
-    # unit testing?
-    # negative dataset function
-    from .query_helpers import run_ql_query
-
-    # testing:
-    ES_mil = run_ql_query(place = "Madrid, Spain", 
-        buffersize = 200000, 
-        tag = 'military', values = ['airfield','bunker'])
-
-    # first approach: take any tile in which any query node appears
-    # as a positive example, and any other tile in the bounding box
-    # as a negative example:
-    # should run the script 'download_tiles.sh' and input
-    # the output file (for positive and negative respectively)
-    os.chdir("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1")
-    sh_creator(ES_mil,[17,18,19],'ES_testpos.tsv','ES_testneg.tsv',buffer = 10)
-
-    # second approach: use Shapely to sample tiles that overlap
-    # with the geometric object, specifying min/max overlap if desired
-    qq = process_query(CN_mil,17)
-
-    positive_dataset(qq,'/mnt/c/Users/skm/Documents/test_picz')
-    # the URL composition is defined for tiles in
-    # see https://wiki.openstreetmap.org/wiki/Tile_servers
-    # spots = calc_map_locations(qq)
-    # out_dir = "/mnt/c/Users/skm/Dropbox/AgileBeat"
-    # for x,y in spots:
-    #     outF = f"{out_dir}/lat_{x}_lon_{y}_zoom_{z}.png"
-    #     save_file(x,y,15,outF)
-    #     print(f"Got file {outF}")
-    
-    # whatever header is sent by default is not responded to
-    # this or using subprocess and wget or curl works
-    # import requests as rq
-    # headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5)\
-    #         AppleWebKit/537.36 (KHTML, like Gecko) Cafari/537.36'}
-    # res = rq.get(url,headers = headers)
-    # print(res.status_code)
-    # with open("/mnt/c/Users/skm/Dropbox/AgileBeat/test.png",'wb') as fh:
-    #     fh.write(res.content)

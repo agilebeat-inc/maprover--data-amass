@@ -4,17 +4,8 @@ This pipeline provides utilities to get sets of OpenStreetMap tiles which overla
 
 There are three steps in the 'pipeline', each of which has a separate submodule:
 1. creating a query that gets items of interest in a specific geographical region. `run_ql_query` in `query_helpers.py` handles this part, and its return value is used in the other steps
-2. Given the query results of step 1, find OSM tiles corresponding to the query elements. There are two approaches, `sh_creator` in `downloading.py` is simpler but faster; the second approach is documented in `query_processing.py` and uses Shapely. The latter should be more configurable but the tile conversion is still in progress and currently imperfect. 
-3. Having identified a set of tiles, download them. There are currently two implementations corresponding to the differences in step 2; perhaps this should get redone. In the first case, running `sh_creator` will create two tab-delimited output files for the positive and negative datasets respectively. These just contain the tile coordinates data and should be input as the `--file` or `-f` argument to `download_tiles.sh`. That script does the actual downloading along with some basic error checking.
-
-Concretely, for a given pair of output files, run
-
-```bash
-bash download_tiles.sh -f pos_file.tsv -o ./pos_imgs
-bash download_tiles.sh -f neg_file.tsv -o ./neg_imgs -n 500
-```
-
-The `-n 500` in the latter command restricts the download to the first 500 tiles in `neg_file.tsv`. It is very important to run this command with distinct `-o` values since otherwise the images will get mixed together!
+2. Given the query results of step 1, find OSM tiles corresponding to the query elements. There are two approaches, `create_tileset` in `downloading.py` is simpler but faster; the second approach is documented in `query_processing.py` and uses Shapely. The latter should be more configurable but the tile conversion is still in progress and currently imperfect. 
+3. Having identified a set of tiles, download them. For now, use the `save_tiles` function, which will download all the tiles from the input dataframe (created by `create_tileset`).
 
 The file `driver.py` has example code showing how the parts work together.
 
@@ -43,28 +34,40 @@ Thessaloniki_beaches = pipe1.run_ql_query(
 )
 # check some basic info about the returned query:
 print(Thessaloniki_beaches['query_info'])
-# now call sh_creator to output the 'positive' and 'negative' training sets
+# next, create the 'positive' and 'negative' training sets
 zoom_levels = [18,19]
-pipe1.sh_creator(Thessaloniki_beaches,zoom_levels,'is_beach.tsv','not_beach.tsv')
+dfs = pipe1.create_tileset(Thessaloniki_beaches,zoom_levels,buffer = 5)
+posdir = './thessa_beach'
+negdir = './thessa_not_beach'
+num_tiles = 50 # let's save this many tiles
+pipe1.save_tiles(dfs['positive'].head(num_tiles),posdir)
+pipe1.save_tiles(dfs['negative'].head(num_tiles),negdir)
 ```
 
-Now, to download the tiles we can run the bash script `download_tiles.sh` with each input (making sure to save the images in different output directories):
+It's probably a good idea to also save the dataframes in the same directory where the tiles were downloaded:
 
-```bash
-./download_tiles.sh --file is_beach.tsv --outdir ./thessa_beach
-./download_tiles.sh -f not_beach.tsv -o ./thessa_not_beach -n 200
+```python
+dfs['positive'].to_csv(
+    path_or_buf = pdir + '/tile_info.tsv',
+    sep = '\t',
+    header = True,
+    index = False
+)
+dfs['negative'].to_csv(
+    path_or_buf = ndir + '/tile_info.tsv',
+    sep = '\t',
+    header = True,
+    index = False
+)
 ```
 
-Short versions of the commands in the second case are used for illustration, and the `-n 200` means only the first 200 tiles in `not_beach.tsv` will be downloaded. Any files that did not download successfully will have their URLs written to `failed.txt` within the output folder.
-
-So now there should be two folders, `thessa_beach` and `thessa_not_beach` which have tiles.
+So now there should be two folders, `thessa_beach` and `thessa_not_beach` which have tiles and the associated metadata.
 
 _Optional_ if we'd like to filter out tiles that are effectively empty, we can run `post_filtering.py` to either delete them or move them into a different directory. Here's an example:
 
-```bash
-python3 post_filtering.py --dir=./thessa_not_beach --min_size=600 -o=junk
+```python
+empty_imgs = pipe1.filter_size(negdir,650)
+pipe1.apply_filter(negdir,[e[0] for e in empty_imgs],'junk')
 ```
 
 This moves all tiles whose file size is less than 600 bytes into a subdirectory `junk` so that they can be easily ignored when the training tiles get read in to other programs.
-
-We could have also done all of this from within a single Python script; again, see the `driver.py` code.
