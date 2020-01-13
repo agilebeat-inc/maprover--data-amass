@@ -14,20 +14,20 @@ import numpy as np
 #     return [(x,y) for x,y in zip(xC,yC)]
 
 def deg2num(lat_deg, lon_deg, zoom):
-  lat_rad = math.radians(lat_deg)
-  n = 2.0 ** zoom
-  xtile = (n / 360) * (lon_deg + 180)
-  ytile = (n / 2) * (1.0 - math.asinh(math.tan(lat_rad))/math.pi)
-  return (int(xtile), int(ytile))
+    lat_rad = math.radians(lat_deg)
+    n = 2.0 ** zoom
+    xtile = (n / 360) * (lon_deg + 180)
+    ytile = (n / 2) * (1.0 - math.asinh(math.tan(lat_rad))/math.pi)
+    return (int(xtile), int(ytile))
 
 def num2deg(xtile, ytile, zoom):
-  n = 2.0 ** zoom
-  lon_deg = 360 * xtile / n - 180
-  lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * ytile / n)))
-  lat_deg = math.degrees(lat_rad)
-  return (lat_deg, lon_deg)
+    n = 2.0 ** zoom
+    lon_deg = 360 * xtile / n - 180
+    lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * ytile / n)))
+    lat_deg = math.degrees(lat_rad)
+    return (lat_deg, lon_deg)
 
-  def sample_complement(xx,yy,n,buffer = 0):
+def sample_complement(xx,yy,n,buffer = 0):
     """ 
     Take a sample from the bounding box of the elements in xx and yy.
     The pairs [(x,y) for x,y in zip(xx,yy)] are not included in the sample;
@@ -43,7 +43,6 @@ def num2deg(xtile, ytile, zoom):
     Raises:
         ValueError for a few edge cases
     """
-
     n_pos = len(xx)
     if len(yy) != n_pos:
         msg = f"sample_complement: lengths of {xx} and {yy} must match!"
