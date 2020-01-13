@@ -1,12 +1,14 @@
 # functions handling processing of queries and identifying tiles
 
 import numpy as np
+import pandas as pd
 # geometry
 import shapely.geometry as geom
 # from shapely.ops import unary_union
 from shapely.prepared import prep
 
 from .utils import deg2num, num2deg, sample_complement
+from .query_helpers import atomize_features
 
 def covering_grid(poly,tile_size):
     """
