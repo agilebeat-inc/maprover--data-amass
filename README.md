@@ -48,13 +48,13 @@ It's probably a good idea to also save the dataframes in the same directory wher
 
 ```python
 dfs['positive'].to_csv(
-    path_or_buf = pdir + '/tile_info.tsv',
+    path_or_buf = posdir + '/tile_info.tsv',
     sep = '\t',
     header = True,
     index = False
 )
 dfs['negative'].to_csv(
-    path_or_buf = ndir + '/tile_info.tsv',
+    path_or_buf = negdir + '/tile_info.tsv',
     sep = '\t',
     header = True,
     index = False
