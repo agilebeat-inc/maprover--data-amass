@@ -3,12 +3,10 @@
 import numpy as np
 # geometry
 import shapely.geometry as geom
-from shapely.ops import unary_union
+# from shapely.ops import unary_union
 from shapely.prepared import prep
 
-
-def coord_xy(geojgeom):
-    return [(x['lat'], x['lon']) for x in geojgeom]
+from .utils import deg2num, num2deg, sample_complement
 
 def covering_grid(poly,tile_size):
     """
@@ -127,16 +125,17 @@ def process_way(way_dict,**kwargs):
     Returns:
         list of (Shapely.geometry.polygon.Polygon,float) tuples  (tile, overlap)
     """
-    # way_dict = rel[14]; kwargs = {}
-    coords = coord_xy(way_dict['geometry'])
+
+    coords = [(x['lat'], x['lon']) for x in way_dict['geometry']]
+    
     if len(coords) < 5: # treat it as node instead?
         return []
+    is_closed = False
     if 'nodes' in way_dict:
         is_closed = way_dict['nodes'][0] == way_dict['nodes'][-1]
     elif 'role' in way_dict:
         is_closed = way_dict['role'] == 'outer' and is_basically_closed(coords)
-    else:
-        is_closed = False
+    
     if is_closed:
         poly = geom.Polygon(shell = coords)
     else:
@@ -177,8 +176,41 @@ def tile2json(tile):
     jsn['geometry'] = [{'lat': x,'lon':y} for x,y in tile.exterior.coords]
     return jsn
 
+def find_tile_coords(tile,zoom : int):
+    """
+    given a tile identified as 'of interest',
+    get the map coordinates based on the centroid
+    Args:
+        tile: a shapely Polygon (should be a box as returned from process_node, process_way)
+        whose vertices are latitude/longitude coordinates
+        zoom: level of zoom between 1 and 19
+    Returns: the map coordinates as determined by .deg2num
+    """
+    if int(zoom) != zoom or zoom < 1 or zoom > 19:
+        raise ValueError(f"zoom should be an integer in [1,19]; got {zoom}")
+    center = list(tile.centroid.coords)[0]
+    return (*deg2num(center[0],center[1],zoom),zoom)
+
+def calc_map_locations(processed_query):
+    """
+    given a processed query (return value of process_query),
+    and level of zooming, find the corresponding map coordinates to fetch the tiles
+    Args:
+        processed_query: the output of `process_query`
+    Returns:
+        a pandas.DataFrame with columns 'x', 'y', and 'z'
+    """
+    res = set()
+    z = processed_query['zoom']
+    for elem in processed_query['elements']:
+        if not len(elem['tiles']): continue
+        res.update(find_tile_coords(tile[0],z) for tile in elem['tiles'])
+    return pd.DataFrame.from_records(list(res),columns = ['x','y','z'])
+
 # this should become a method?
-def process_query(ovp_query,zoom,max_tiles_per_entity = 25,min_ovp=0,max_ovp=1):
+def process_query(
+    ovp_query, zoom,max_tiles_per_entity = 25,
+    min_ovp = 0, max_ovp = 1):
     """
     an Overpass API query returns a geoJSON-like response. This function loops over the response
     list and finds tiles which overlap with the query response. It appends the tiles
@@ -206,21 +238,60 @@ def process_query(ovp_query,zoom,max_tiles_per_entity = 25,min_ovp=0,max_ovp=1):
             raise ValueError(f"Should not occur! type is {etype}")
         elem['tiles'] = tiles
     ovp_query['zoom'] = zoom # track @ which zoom it was processed
+    ntiles = sum(len(e['tiles']) for e in ovp_query['elements'])
+    ovp_query['total_tiles'] = ntiles
+    print(f"Identified {ntiles} positive tiles at zoom {zoom}.")
+    # this is obviously duplicative and should be reconsdiered
+    # but for ease of inspection let's also add all the tiles
+    # as a flat list, esp. to check min_ovp/max_ovp
+    ovp_query['tiles'] = sum((e['tiles'] for e in ovp_query['elements']),[])
     return ovp_query
 
-if __name__ == '__main__':
+def create_tileset(geo_dict, zooms, buffer = 0):
+    """
+    This function creates outputs (x,y,z) tile coordinate files which can be
+    fed into download_tiles.sh or the save_tiles function to get tiles from the OSM server.
 
-    import os
-    from collections import Counter
-    if os.getcwd().startswith('/tmp/'):
-        os.chdir("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1")
-    from query_helpers import run_ql_query
-    # test that ways and relations are correctly processed:
-    # this query should return 8 ways and 2 relations
-    qq = run_ql_query('San Juan, Puero Rico','landuse',['forest'],10000)
-    rels = [e for e in qq['elements'] if e['type'] == 'relation']
-    qp = process_query(qq,17)
-
-    pw = process_way(qq['elements'][1],max_ovp = 0.8)
-    unary_union([p[0] for p in pw])
+    Args:
+        geo_dict: an Overpass API query response
+        zooms: zoom levels of tiles to be extracted 
+        buffer: if nonzero, any negative tile will be at least this far away from the postive
+        set, measured by L2 distance, ensuring more separation between classes if desired.
     
+    Returns: dict with two pandas.DataFrame: 'positive' and 'negative'
+    """
+
+    if type(zooms) is int:
+        zooms = [zooms]
+    if any(z < 2 or z > 19 for z in zooms):
+        raise ValueError("all zoom levels must be between 2 and 19")
+    
+    nodes = atomize_features(geo_dict)
+    points_list = [(node['lat'],node['lon']) for node in nodes]
+    pos_DFs, neg_DFs = [], []
+
+    for zoom in zooms:   
+
+        xy = [deg2num(x,y,zoom) for x,y in points_list]
+        pos_df = pd.DataFrame.from_records(xy,columns = ['x','y']).drop_duplicates()
+        n_neg = pos_df.shape[0]
+        neg_x, neg_y = sample_complement(pos_df['x'],pos_df['y'],n_neg,buffer)
+        neg_df = pd.DataFrame({'x': neg_x,'y': neg_y}).sort_values(by = ['x','y'])
+        pos_df['z'] = zoom
+        neg_df['z'] = zoom
+        pos_DFs.append(pos_df)
+        neg_DFs.append(neg_df)
+    
+    out_pos = pd.concat(pos_DFs,axis = 0)
+    out_neg = pd.concat(neg_DFs,axis = 0)
+    # add back the longitude/latitude coordinates
+    LLpos = [num2deg(x,y,z) for x,y,z in zip(out_pos['x'],out_pos['y'],out_pos['z'])]
+    LLneg = [num2deg(x,y,z) for x,y,z in zip(out_neg['x'],out_neg['y'],out_neg['z'])]
+    out_pos['latitude']  = [e[0] for e in LLpos]
+    out_pos['longitude'] = [e[1] for e in LLpos]
+    out_neg['latitude']  = [e[0] for e in LLneg]
+    out_neg['longitude'] = [e[1] for e in LLneg]
+    common_row = pd.merge(out_pos,out_neg,on = ['x','y','z']).shape[0]
+    if common_row > 0:
+        raise RuntimeError(f"Somehow there are {common_row} common rows!")
+    return {'positive': out_pos, 'negative': out_neg }    

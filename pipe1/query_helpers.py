@@ -82,13 +82,3 @@ def atomize_features(ovp_response):
                 except:
                     continue
     return node_list
-    
-
-if __name__ == '__main__':
-
-    # example queries:
-    q1 = run_ql_query(90210,'leisure',['park'],5000)
-    qq_nodes = atomize_features(qq)
-
-    CN_mil = run_ql_query(place = "Beijing, China", buffersize = 200000, 
-        tag = 'military', values = ['airfield'])
