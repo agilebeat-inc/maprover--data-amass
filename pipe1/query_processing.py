@@ -161,23 +161,6 @@ def process_relation(rel_dict,**kwargs):
             res.append(process_node(mem))
     return res
 
-def tile2json(tile):
-    """
-    Having found a set of overlapping tiles,
-    turn them into a geoJSON representation
-    Args: tile a shapely box
-    Returns: a dict with basic geoJSON field that can be serialized
-    into a geoJSON string. Note that the coords list has the first/last
-    point listed twice since it is a 'closed way', conceptually
-    """
-    jsn = {}
-    bb = tile.bounds
-    jsn['bounds'] = {
-        'minlat': bb[0],'minlon': bb[1],'maxlat': bb[2],'maxlon': bb[3]
-    }
-    jsn['geometry'] = [{'lat': x,'lon':y} for x,y in tile.exterior.coords]
-    return jsn
-
 def find_tile_coords(tile,zoom : int):
     """
     given a tile identified as 'of interest',
@@ -227,6 +210,8 @@ def process_query(
     Returns:
         a geoJSON-like object whose elements have an added 'tiles' property
     """
+    if len(ovp_query['elements']) is 0:
+        raise ValueError("The query is empty - cannot continue!")
     for i,elem in enumerate(ovp_query['elements']):
         etype = elem['type']
         if etype == 'node':
@@ -249,7 +234,7 @@ def process_query(
     ovp_query['tiles'] = sum((e['tiles'] for e in ovp_query['elements']),[])
     return ovp_query
 
-def create_tileset(geo_dict, zooms, buffer = 0):
+def basic_tileset(geo_dict, zooms, buffer = 0,n_neg = None):
     """
     This function creates outputs (x,y,z) tile coordinate files which can be
     fed into download_tiles.sh or the save_tiles function to get tiles from the OSM server.
@@ -259,10 +244,12 @@ def create_tileset(geo_dict, zooms, buffer = 0):
         zooms: zoom levels of tiles to be extracted 
         buffer: if nonzero, any negative tile will be at least this far away from the postive
         set, measured by L2 distance, ensuring more separation between classes if desired.
+        n_neg: if provided, will fetch this many negative tiles rather than the 
     
     Returns: dict with two pandas.DataFrame: 'positive' and 'negative'
     """
-
+    if len(geo_dict['elements']) is 0:
+        raise ValueError("The query is empty - cannot continue!")
     if type(zooms) is int:
         zooms = [zooms]
     if any(z < 2 or z > 19 for z in zooms):
@@ -272,15 +259,13 @@ def create_tileset(geo_dict, zooms, buffer = 0):
     points_list = [(node['lat'],node['lon']) for node in nodes]
     pos_DFs, neg_DFs = [], []
 
-    for zoom in zooms:   
+    for zoom in zooms:
 
-        xy = [deg2num(x,y,zoom) for x,y in points_list]
-        pos_df = pd.DataFrame.from_records(xy,columns = ['x','y']).drop_duplicates()
-        n_neg = pos_df.shape[0]
-        neg_x, neg_y = sample_complement(pos_df['x'],pos_df['y'],n_neg,buffer)
-        neg_df = pd.DataFrame({'x': neg_x,'y': neg_y}).sort_values(by = ['x','y'])
-        pos_df['z'] = zoom
-        neg_df['z'] = zoom
+        zxy = [(zoom,*deg2num(x,y,zoom)) for x,y in points_list]
+        pos_df = pd.DataFrame.from_records(zxy,columns = ['z','x','y']).drop_duplicates()
+        num_neg = pos_df.shape[0] if n_neg is None else int(n_neg)
+        neg_x, neg_y = sample_complement(pos_df['x'],pos_df['y'],num_neg,buffer)
+        neg_df = pd.DataFrame({'z': zoom,'x': neg_x,'y': neg_y}).sort_values(by = ['z','x','y'])
         pos_DFs.append(pos_df)
         neg_DFs.append(neg_df)
     
@@ -293,7 +278,48 @@ def create_tileset(geo_dict, zooms, buffer = 0):
     out_pos['longitude'] = [e[1] for e in LLpos]
     out_neg['latitude']  = [e[0] for e in LLneg]
     out_neg['longitude'] = [e[1] for e in LLneg]
-    common_row = pd.merge(out_pos,out_neg,on = ['x','y','z']).shape[0]
+    common_row = pd.merge(out_pos,out_neg,on = ['z','x','y']).shape[0]
     if common_row > 0:
         raise RuntimeError(f"Somehow there are {common_row} common rows!")
     return {'positive': out_pos, 'negative': out_neg }    
+
+def shapely_tileset(processed_query,min_ovp = 0,max_ovp = 1,
+    n_neg = None,buffer = 0):
+    """
+    Create a DataFrame containing information on all tiles identified
+    as downloadable
+    Args:
+        processed_query: return value of `process_query`
+        min_ovp: float in [0,1]; only keep tiles where intersection between shape and tile box is at least `min_ovp`
+        max_ovp: float in [0,1]; only keep tiles where intersection between shape and tile box is at most `max_ovp`
+        n_neg: int, optional; number of negative tiles to download
+        buffer: int, optional; margin between positive and negative data sets (in # of tiles)
+    Returns:
+        A pandas DataFrame with tile locations and corresponding metadata
+    """
+    file_locs, types, xx, yy, qual, tags = [],[],[],[],[],[]
+    z = processed_query['zoom']
+    for elem in processed_query['elements']:
+        for tile in elem['tiles']:
+            qq = tile[1]
+            if qq >= min_ovp and qq <= max_ovp:
+                x,y,_ = find_tile_coords(tile[0],z)
+                xx.append(x)
+                yy.append(y)
+                qual.append(tile[1])
+                tags.append(json.dumps(elem['tags']))
+                types.append(elem['type'])
+    
+    pos_df = pd.DataFrame({
+        'z': z, 'x' : xx, 'y': yy, 
+        'entity': types,
+        'overlap': qual,'tags': tags,
+        'placename': processed_query['query_info']['placename']
+    }) \
+    .drop_duplicates(subset = ['x','y']) \
+    .sort_values(by = ['x','y'])
+    if n_neg is None: n_neg = pos_df.shape[0]
+    negt = sample_complement(pos_df['x'],pos_df['y'],n_neg,buffer)
+    neg_df = pd.DataFrame({'z': z,'x': negt[0],'y': negt[1]}) \
+        .sort_values(by = ['x','y'])
+    return { 'positive': pos_df, 'negative': neg_df }

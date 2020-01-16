@@ -5,3 +5,4 @@ pandas >= 0.25.3
 shapely >= 1.6.4.post2
 osmxtract >= 0.0.1
 Pillow >= 6.2.1
+matplotlib ~= 3.1.2

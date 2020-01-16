@@ -1,18 +1,6 @@
 import math
 import numpy as np
 
-# def polyline_to_segments(polyline):
-#     polyline.insert(0, [None, None])
-#     polyline.append([None, None])
-#     return zip(polyline[::2], polyline[1::2])
-
-# def points_along_line_segment(line_segment,n_points = 50):
-#     x0, y0 = line_segment[0]
-#     x1, y1 = line_segment[1]
-#     xC = np.linspace(x0,x1,num = n_points)
-#     yC = np.linspace(y0,y1,num = n_points)
-#     return [(x,y) for x,y in zip(xC,yC)]
-
 def deg2num(lat_deg, lon_deg, zoom):
     lat_rad = math.radians(lat_deg)
     n = 2.0 ** zoom
@@ -97,3 +85,14 @@ def tile_size(y,zoom):
     height = num2deg(0,y,zoom)[1]
     return width, height
 
+def save_tsv(df,filename,sep='\t'):
+    """
+    Simple convenience function to write pandas DataFrame
+    to a tsv (or whatever you put as 'sep')
+    """
+    df.to_csv(
+        path_or_buf = filename,
+        sep = sep,
+        header = True,
+        index = False
+    )

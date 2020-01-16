@@ -42,6 +42,8 @@ def run_ql_query(place,tag,values,buffersize = None,case = False,timeout = 25):
         'bounds': bounds,
         'types': Counter(e['type'] for e in res['elements'])
     }
+    if len(res['elements']) is 0:
+        print("*****\n\nWarning: empty query!!!\n\n*****")
     return res
     
 def atomize_features(ovp_response):

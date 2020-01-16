@@ -40,95 +40,135 @@ def save_tile(x,y,z,fpath):
         print(f"Error getting tile: {e}")
         return 1
 
-def save_tiles(df,output_dir):
+def save_tiles(df,output_dir,namefunc = None):
     """
     Save the tiles whose coordinates are in the input DataFrame,
     defined by columns x, y, and z
     Args:
         df: pandas.DataFrame (created by `create_tileset` function)
         output_dir: directory where the .png files should be stored
+        namefunc: optional, a function that takes arguments x,y,z and returns a file name.
+        The default name function is: `f'{z}_{x}_{y}.png'` for integers x,y,z.
     Returns:
-        None, called for side-effect of downloading tiles
+        a pandas DataFrame reflecting the tiles which were actually downloaded, adding a column
+        `file_loc` identifying where on the file system the tile .png was saved
     """
     if not isinstance(df,pd.core.frame.DataFrame):
         raise TypeError("df must be a pandas DataFrame!")
-    if any(e not in df.columns for e in ('x','y','z')):
+    if any(e not in df.columns for e in ('z','x','y')):
         raise ValueError("df must have columns x, y, and z")
-    if output_dir.endswith('/'): output_dir = output_dir[:-1]
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-    i, L = 0, df.shape[0]
-    for x,y,z in zip(df['x'],df['y'],df['z']):
-        i += 1
+    if namefunc is None:
+        def namefunc(x,y,z):
+            return f'{z}_{x}_{y}.png'
+
+    opath = os.path.abspath(output_dir) # for recording purposes, we don't want relative file paths
+    Path(opath).mkdir(parents=True, exist_ok=True)
+    L = df.shape[0]
+    flocs = [''] * L
+    for i,xyz in enumerate(zip(df['x'],df['y'],df['z'])):
+        x,y,z = xyz
         print(f"({i} of {L})...")
         if i % 50 is 0:
             print('zzz')
             sleep(1.33)
-        tile_name = f"{x}_{y}_{z}.png"
-        outloc = output_dir + '/' + tile_name
-        save_tile(x,y,z,outloc)
+        tile_name = namefunc(x,y,z)
+        outloc = opath + '/' + tile_name
+        if save_tile(x,y,z,outloc) is 0:
+            flocs[i] = outloc
+    df['file_loc'] = flocs
+    return df[df['file_loc'] != '']
 
-def positive_dataset(processed_query,out_dir,namefunc = None):
+def add_latlon(df):
+    """ add latitude/longitude values to a dataframe """
+    LLs = [num2deg(x,y,z) for x,y,z in zip(df['x'],df['y'],df['z'])]
+    df['latitude']  = [e[0] for e in LLs]
+    df['longitude'] = [e[1] for e in LLs]
+    return df
+
+def basic_tileset(geo_dict, zooms, buffer = 0,n_neg = None):
     """
-    download the map tiles corresponding to the locations in
-    the given query; save tiles along with a DataFrame of metadata
-    to directory `out_dir`.
+    This function creates outputs (x,y,z) tile coordinate files which can be
+    fed into download_tiles.sh or the save_tiles function to get tiles from the OSM server.
+
+    Args:
+        geo_dict: an Overpass API query response
+        zooms: zoom levels of tiles to be extracted 
+        buffer: if nonzero, any negative tile will be at least this far away from the postive
+        set, measured by L2 distance, ensuring more separation between classes if desired.
+        n_neg: if provided, will fetch this many negative tiles rather than the 
+    
+    Returns: dict with two pandas.DataFrame: 'positive' and 'negative'
+    """
+    if len(geo_dict['elements']) is 0:
+        raise ValueError("The query is empty - cannot continue!")
+    if type(zooms) is int:
+        zooms = [zooms]
+    if any(z < 2 or z > 19 for z in zooms):
+        raise ValueError("all zoom levels must be between 2 and 19")
+    
+    nodes = atomize_features(geo_dict)
+    points_list = [(node['lat'],node['lon']) for node in nodes]
+    pos_DFs, neg_DFs = [], []
+
+    for zoom in zooms:
+
+        zxy = [(zoom,*deg2num(x,y,zoom)) for x,y in points_list]
+        pos_df = pd.DataFrame.from_records(zxy,columns = ['z','x','y'])\
+            .drop_duplicates(subset = ['x','y'])
+        num_neg = pos_df.shape[0] if n_neg is None else int(n_neg)
+        neg_x, neg_y = sample_complement(pos_df['x'],pos_df['y'],num_neg,buffer)
+        neg_df = pd.DataFrame({'z': zoom,'x': neg_x,'y': neg_y}).sort_values(by = ['z','x','y'])
+        pos_DFs.append(pos_df)
+        neg_DFs.append(neg_df)
+    
+    out_pos = add_latlon(pd.concat(pos_DFs,axis = 0))
+    out_neg = add_latlon(pd.concat(neg_DFs,axis = 0))
+
+    common_row = pd.merge(out_pos,out_neg,on = ['z','x','y']).shape[0]
+    if common_row > 0:
+        raise RuntimeError(f"Somehow there are {common_row} common rows!")
+    return {'positive': out_pos, 'negative': out_neg }    
+
+def shapely_tileset(processed_query,min_ovp = 0,max_ovp = 1,
+    n_neg = None,buffer = 0):
+    """
+    Create a DataFrame containing information on all tiles identified
+    as downloadable
     Args:
         processed_query: return value of `process_query`
-        out_dir: directory where files should be saved
-        namefunc: function mapping tuple (x,y,z) into a file name
+        min_ovp: float in [0,1]; only keep tiles where intersection between shape and tile box is at least `min_ovp`
+        max_ovp: float in [0,1]; only keep tiles where intersection between shape and tile box is at most `max_ovp`
+        n_neg: int, optional; number of negative tiles to download
+        buffer: int, optional; margin between positive and negative data sets (in # of tiles)
+    Returns:
+        A pandas DataFrame with tile locations and corresponding metadata
     """
     file_locs, types, xx, yy, qual, tags = [],[],[],[],[],[]
-    if namefunc is None:
-        def namefunc(x,y,z):
-            return f'lat_{y}_lon_{x}_zoom_{z}.png'
-
-    if out_dir.endswith('/'): out_dir = out_dir[:-1]
-    Path(out_dir).mkdir(parents=True, exist_ok=True)
-    
     z = processed_query['zoom']
-    
     for elem in processed_query['elements']:
-        tagstr = json.dumps(elem['tags'])
-        entity = elem['type'] # node, way, or relation
         for tile in elem['tiles']:
-            if random.random() < 0.08: sleep(0.67)
-            x,y,_ = find_tile_coords(tile[0],z)
-            floc = f"{out_dir}/{namefunc(x,y,z)}"
-            # first check whether we already got this tile
-            # for example densely packed nodes will have a lot
-            # of closely overlapping tiles
-            got_png = save_tile(x,y,z,floc)
-            if got_png is 0:
+            qq = tile[1]
+            if qq >= min_ovp and qq <= max_ovp:
+                x,y,_ = find_tile_coords(tile[0],z)
                 xx.append(x)
                 yy.append(y)
                 qual.append(tile[1])
-                tags.append(tagstr)
-                types.append(entity)
-                file_locs.append(floc)
-    print(f'Got {len(xx)} records!')
-    return pd.DataFrame({
-        'lat' : xx, 'lon': yy, 'z': z,
-        'location': file_locs, 'entity': types,
+                tags.append(json.dumps(elem['tags']))
+                types.append(elem['type'])
+    
+    pos_df = pd.DataFrame({
+        'z': z, 'x' : xx, 'y': yy, 
+        'entity': types,
         'overlap': qual,'tags': tags,
         'placename': processed_query['query_info']['placename']
-    })
-
-def negative_dataset(processed_query,out_dir,buffer = 0,namefunc = None):
-    
-    processed_query = qp
-    buffer = 5
-    xyz = calc_map_locations(processed_query)
-    # now use sample_complement to ID negative tiles:
-    n_pos = xyz.shape[0]
-    # it is possible that we select tiles within a polygon here,
-    # which is not desired. But using 'buffer' should make this very
-    # unlikely
-    negt = sample_complement(xyz['x'],xyz['y'],n_pos,buffer)
-    negdf = pd.DataFrame(
-        {'x': negt[0],'y': negt[1],'z': processed_query['zoom']}
-    )
-    # now save them (we do not need metadata beyond locations
-    # since negatives by definition are unknown quantities)
-    save_tiles(negdf,out_dir)
-    return negdf
-
+    }) \
+    .drop_duplicates(subset = ['x','y']) \
+    .sort_values(by = ['x','y'])
+    if n_neg is None: n_neg = pos_df.shape[0]
+    negt = sample_complement(pos_df['x'],pos_df['y'],n_neg,buffer)
+    neg_df = pd.DataFrame({'z': z,'x': negt[0],'y': negt[1]}) \
+        .sort_values(by = ['x','y'])
+    return { 
+        'positive': add_latlon(pos_df),
+        'negative': add_latlon(neg_df)
+    }

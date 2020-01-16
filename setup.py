@@ -16,6 +16,6 @@ setup(
     python_requires = '>=3.6',
     install_requires = [
         'numpy >= 1.17','pandas >= 0.25','shapely >= 1.6',
-        'osmxtract >= 0.0.1','pillow >= 6.2'
+        'osmxtract >= 0.0.1','pillow >= 6.2','matplotlib ~= 3.1.2'
     ]
 )
