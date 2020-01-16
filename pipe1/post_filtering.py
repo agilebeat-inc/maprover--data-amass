@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# coding: utf-8
+
 import os, re, contextlib
 # cofusingly, the package is called 'Pillow' but
 # the module name is still PIL (Python Imaging Library)

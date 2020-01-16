@@ -4,7 +4,7 @@ This pipeline provides utilities to get sets of OpenStreetMap tiles which overla
 
 There are three steps in the 'pipeline', each of which has a separate submodule:
 1. creating a query that gets items of interest in a specific geographical region. `run_ql_query` in `query_helpers.py` handles this part, and its return value is used in the other steps
-2. Given the query results of step 1, find OSM tiles corresponding to the query elements. There are two approaches, `create_tileset` in `downloading.py` is simpler but faster; the second approach is documented in `query_processing.py` and uses Shapely. The latter should be more configurable but the tile conversion is still in progress and currently imperfect. 
+2. Given the query results of step 1, find OSM tiles corresponding to the query elements. There are two approaches in `query_processing.py`; `create_tileset` is simpler but faster since it simply explodes all the results into individual nodes, then finds any tiles that overlap with any nodes. The second approach is implemented in  `process_query` and uses Shapely. There are `min_ovp` and `max_ovp` parameters which filter matching tiles to ones that overlap with an area of interest (when it is a Polygon and not a point) by a min. or max. amount.
 3. Having identified a set of tiles, download them. For now, use the `save_tiles` function, which will download all the tiles from the input dataframe (created by `create_tileset`).
 
 The file `driver.py` has example code showing how the parts work together.
@@ -23,7 +23,7 @@ Once we have positive and negative sets of images for a particular query, they s
 
 Here is an example showing all the steps:
 
-First, run a Python script similar to what's in `driver.py`. Say we want to find the beaches within 25000 meters of Thessaloniki:
+Following what's in `driver.py`, say we want to find the beaches within 25000 meters of Thessaloniki:
 
 ```python
 import pipe1
