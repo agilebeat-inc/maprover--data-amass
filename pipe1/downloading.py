@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# the other pieces we need to run queries and get tiles
+# the other pieces we need to run queries and get tiles 
 from .utils import deg2num, num2deg, sample_complement
 from .query_processing import process_query, find_tile_coords, calc_map_locations
 from .query_helpers import atomize_features
@@ -67,23 +67,22 @@ def save_tiles(df,output_dir,namefunc = None):
     flocs = [''] * L
     for i,xyz in enumerate(zip(df['x'],df['y'],df['z'])):
         x,y,z = xyz
-        print(f"({i} of {L})...")
-        if i % 50 is 0:
+        print(f"({i+1} of {L})...")
+        if (i+1) % 50 is 0:
             print('zzz')
             sleep(1.33)
         tile_name = namefunc(x,y,z)
         outloc = opath + '/' + tile_name
         if save_tile(x,y,z,outloc) is 0:
             flocs[i] = outloc
-    df['file_loc'] = flocs
+    df = df.assign(file_loc = flocs)
     return df[df['file_loc'] != '']
 
 def add_latlon(df):
     """ add latitude/longitude values to a dataframe """
     LLs = [num2deg(x,y,z) for x,y,z in zip(df['x'],df['y'],df['z'])]
-    df['latitude']  = [e[0] for e in LLs]
-    df['longitude'] = [e[1] for e in LLs]
-    return df
+    LLdf = pd.DataFrame.from_records(LLs,columns = ['latitude','longitude'])
+    return pd.concat([df.reset_index(drop=True),LLdf],axis = 1)
 
 def basic_tileset(geo_dict, zooms, buffer = 0,n_neg = None):
     """

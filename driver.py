@@ -39,18 +39,18 @@ print(f"We actually determined locations for {np} and {nn} +/- tiles.")
 pipe1.plot_tiles(dfs,tile_size = 6)
 
 # PUT YOUR OWN DIRECTORY HERE:
-basedir = '/mnt/c/Users/skm/Dropbox/AgileBeat'
+basedir = '/mnt/c/AgileBeat/test'
 pdir, ndir = basedir + '/testpos', basedir + '/testneg'
 max_tiles = 20 # just testing
 
 # now we can download the tiles:
-pipe1.save_tiles(dfs['positive'].head(max_tiles),pdir + '/basic')
-pipe1.save_tiles(dfs['negative'].head(max_tiles),ndir + '/basic')
+rv1 = pipe1.save_tiles(dfs['positive'].head(max_tiles),pdir + '/basic')
+rv2 = pipe1.save_tiles(dfs['negative'].head(max_tiles),ndir + '/basic')
 # may also want to save the data sets:
 # can always still use download_tiles shell script to
 # get tiles from this file at a later time
-save_tsv(dfs['positive'],pdir + '/tile_info_basic.tsv')
-save_tsv(dfs['negative'],ndir + '/tile_info_basic.tsv')
+save_tsv(rv1,pdir + '/tile_info_basic.tsv')
+save_tsv(rv2,ndir + '/tile_info_basic.tsv')
 
 
 # approach with Shapely
@@ -58,9 +58,9 @@ save_tsv(dfs['negative'],ndir + '/tile_info_basic.tsv')
 # but for illustration purposes, both sets are saved into distinct
 # directories compared to the 'basic' approach
 qp = pipe1.process_query(ES_mil,17,min_ovp = 0.2,max_ovp = 0.9)
-shdf = shapely_tileset(qp,min_ovp = 0.2,max_ovp = 0.98,n_neg = 500,buffer = 15)
-dfp2 = save_tiles(shdf['positive'],pdir + '/shapely')
-dfn2 = save_tiles(shdf['negative'],ndir + '/shapely')
+shdf = pipe1.shapely_tileset(qp,min_ovp = 0.2,max_ovp = 1,n_neg = 500,buffer = 15)
+dfp2 = pipe1.save_tiles(shdf['positive'].head(max_tiles),pdir + '/shapely')
+dfn2 = pipe1.save_tiles(shdf['negative'].head(max_tiles),ndir + '/shapely')
 save_tsv(dfp2,pdir + '/tile_info_shapely.tsv')
 save_tsv(dfn2,ndir + '/tile_info_shapely.tsv')
 
@@ -69,10 +69,6 @@ empty_imgs = pipe1.filter_size(ndir + '/basic',650)
 pipe1.apply_filter(ndir,[e[0] for e in empty_imgs],'junk')
 
 if False:
-    # more examples/testing
-    import os
-    if os.getcwd().startswith('/tmp/'):
-        os.chdir("/mnt/c/Users/skm/Dropbox/AgileBeat/pipeline-1")
     
     q1 = pipe1.run_ql_query(90210,'leisure',values = ['park'],5000)
     qq_nodes = pipe1.atomize_features(qq)

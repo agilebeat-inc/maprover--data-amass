@@ -6,14 +6,14 @@ def deg2num(lat_deg, lon_deg, zoom):
     n = 2.0 ** zoom
     xtile = (n / 360) * (lon_deg + 180)
     ytile = (n / 2) * (1.0 - math.asinh(math.tan(lat_rad))/math.pi)
-    return (int(xtile), int(ytile))
+    return int(xtile), int(ytile)
 
 def num2deg(xtile, ytile, zoom):
     n = 2.0 ** zoom
     lon_deg = 360 * xtile / n - 180
     lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * ytile / n)))
     lat_deg = math.degrees(lat_rad)
-    return (lat_deg, lon_deg)
+    return lat_deg, lon_deg
 
 def sample_complement(xx,yy,n,buffer = 0):
     """ 
@@ -32,6 +32,8 @@ def sample_complement(xx,yy,n,buffer = 0):
         ValueError for a few edge cases
     """
     n_pos = len(xx)
+    if n_pos is 0:
+        raise ValueError("sample_complement: empty input!")
     if len(yy) != n_pos:
         msg = f"sample_complement: lengths of {xx} and {yy} must match!"
         raise ValueError(msg)
