@@ -142,7 +142,7 @@ def shapely_tileset(processed_query,min_ovp = 0,max_ovp = 1,
     Returns:
         A pandas DataFrame with tile locations and corresponding metadata
     """
-    file_locs, types, xx, yy, qual, tags = [],[],[],[],[],[]
+    types, xx, yy, qual, tags = [],[],[],[],[],[]
     z = processed_query['zoom']
     for elem in processed_query['elements']:
         for tile in elem['tiles']:
