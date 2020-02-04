@@ -36,7 +36,7 @@ Thessaloniki_beaches = pipe1.run_ql_query(
 print(Thessaloniki_beaches['query_info'])
 # next, create the 'positive' and 'negative' training sets
 zoom_levels = [18,19]
-dfs = pipe1.create_tileset(Thessaloniki_beaches,zoom_levels,buffer = 5)
+dfs = pipe1.basic_tileset(Thessaloniki_beaches,zoom_levels,buffer = 5)
 posdir = './thessa_beach'
 negdir = './thessa_not_beach'
 num_tiles = 50 # let's save this many tiles
