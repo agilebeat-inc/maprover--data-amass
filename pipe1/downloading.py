@@ -29,7 +29,7 @@ def save_tile(x,y,z,fpath):
     Returns: int, 0 if successful and 1 otherwise
     """
     url = f"https://{random.choice('abc')}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-    cmd = f"wget -O {fpath} {url}"
+    cmd = f"wget --user-agent='please download' -O {fpath} {url}"
     if os.path.exists(fpath):
         print(f"Already have tile {fpath}!")
         return 0
@@ -61,7 +61,8 @@ def save_tiles(df,output_dir,namefunc = None):
         def namefunc(x,y,z):
             return f'{z}_{x}_{y}.png'
 
-    opath = os.path.abspath(output_dir) # for recording purposes, we don't want relative file paths
+    #opath = os.path.abspath(output_dir) # for recording purposes, we don't want relative file paths
+    opath = os.path.abspath(os.path.expanduser(output_dir))
     Path(opath).mkdir(parents=True, exist_ok=True)
     L = df.shape[0]
     flocs = [''] * L
