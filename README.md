@@ -71,3 +71,12 @@ pipe1.apply_filter(negdir,[e[0] for e in empty_imgs],'junk')
 ```
 
 This moves all tiles whose file size is less than 600 bytes into a subdirectory `junk` so that they can be easily ignored when the training tiles get read in to other programs.
+
+### To run the project insdie the Visual Studio Code (code)
+
+1. Change directory to /notebooks
+```cd /notebooks```
+2. Copy the example notebook to the notebooks directory
+```cp /workspaces/maprover--data-amass/examples/france-parks.ipynb .```
+3. Start jupyter
+```jupyter notebook --allow-root```
