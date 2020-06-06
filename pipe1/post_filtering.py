@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-import os, re, contextlib
-# cofusingly, the package is called 'Pillow' but
+import os, re, contextlib, glob
+# confusingly, the package is called 'Pillow' but
 # the module name is still PIL (Python Imaging Library)
 from PIL import Image, ImageMath
 from argparse import ArgumentParser
@@ -30,8 +30,7 @@ def filter_size(filesdir: str,min_size: int):
     Return: List of (name,size) tuples of images
     """
     with working_directory(filesdir):
-        pic_re = re.compile(r'\w+\.png$')
-        ff = [f for f in os.listdir() if pic_re.search(f)]
+        ff = glob.glob('*.png')
         fs = [os.path.getsize(f) for f in ff]
     return [(f,sz) for f,sz in zip(ff,fs) if sz <= min_size]
 
@@ -44,14 +43,13 @@ def filter_entropy(filesdir: str,min_e: float):
         min_size: cutoff size; images with smaller entropy are returned
     Return: List of (name,size) tuples of images
     """
-    pic_re = re.compile(r'\w+\.png$')
-
+    
     def img_entropy(imgpath):
         with Image.open(imgpath,'r') as img:
             return img.entropy()
 
     with working_directory(filesdir):
-        ff = [f for f in os.listdir(filesdir) if pic_re.search(f)]
+        ff = glob.glob('*.png')
         ee = [img_entropy(e) for e in ff]
     return [(f,e) for f,e in zip(ff,ee) if e <= min_e]
 
@@ -68,21 +66,17 @@ def apply_filter(filesdir,imgs,outdir = None):
         imgs = [e for e in imgs if os.path.exists(e)]
         print(f"Identified {len(imgs)} files to filter")
         if outdir is None:
-            for img in images:
-                os.remove(img)
+            [os.remove(img) for img in imgs]
         else:
-            if outdir.endswith('/'): outdir = outdir[:-1]
-            if not os.path.exists(outdir):
-                os.makedirs(outdir)
+            os.makedirs(outdir,exist_ok=True)
             for img in imgs:
-                img = img.split('/')[-1]
-                os.rename(img,f"{outdir}/{img}")
+                os.rename(img,os.path.join(outdir,os.path.basename(img)))
 
 
 if __name__ == '__main__':
 
     ap = ArgumentParser(
-    description = "filter low-quality or empty files"
+        description = "filter low-quality or empty files"
     )
     ap.add_argument(
         "--dir","-d",required = True,type = str,

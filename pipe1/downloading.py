@@ -2,11 +2,10 @@
 # coding: utf-8
 
 import random
-import os, sys
-import subprocess as sp
-import json
+import os, sys, json
 from time import sleep
 from pathlib import Path
+import requests as rq
 
 import numpy as np
 import pandas as pd
@@ -28,14 +27,27 @@ def save_tile(x,y,z,fpath):
         fpath: str
     Returns: int, 0 if successful and 1 otherwise
     """
-    url = f"https://{random.choice('abc')}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-    cmd = f"wget --user-agent='please download' -O {fpath} {url}"
+    UA = "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/77.0"
+    tile_url = f"https://{random.choice('abc')}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    # cmd = f"wget --user-agent='please download' -O {fpath} {url}"
     if os.path.exists(fpath):
         print(f"Already have tile {fpath}!")
         return 0
+    if os.path.isdir(fpath):
+        raise ValueError(f"requested path {fpath} exists and is a directory!")
     try:
-        res = sp.run(cmd,shell = True,stdout = sp.PIPE,stderr = sp.STDOUT)
-        return 0
+        res = rq.get(
+            url=tile_url,
+            headers={'User-Agent': UA}
+        )
+        status = res.status_code
+        if status == 200:
+            with open(fpath,'wb') as of:
+                of.write(res.content)
+            return 0
+        else:
+            print(f"Error: response {status} from server:\n{res.reason}")
+            return status
     except Exception as e:
         print(f"Error getting tile: {e}")
         return 1
@@ -61,7 +73,6 @@ def save_tiles(df,output_dir,namefunc = None):
         def namefunc(x,y,z):
             return f'{z}_{x}_{y}.png'
 
-    #opath = os.path.abspath(output_dir) # for recording purposes, we don't want relative file paths
     opath = os.path.abspath(os.path.expanduser(output_dir))
     Path(opath).mkdir(parents=True, exist_ok=True)
     L = df.shape[0]
@@ -69,12 +80,9 @@ def save_tiles(df,output_dir,namefunc = None):
     for i,xyz in enumerate(zip(df['x'],df['y'],df['z'])):
         x,y,z = xyz
         print(f"({i+1} of {L})...")
-        if (i+1) % 50 is 0:
-            print('zzz')
-            sleep(1.33)
-        tile_name = namefunc(x,y,z)
-        outloc = opath + '/' + tile_name
-        if save_tile(x,y,z,outloc) is 0:
+        sleep(0.75)
+        outloc = os.path.join(opath,namefunc(x,y,z))
+        if save_tile(x,y,z,outloc) == 0:
             flocs[i] = outloc
     df = df.assign(file_loc = flocs)
     return df[df['file_loc'] != '']
@@ -99,7 +107,7 @@ def basic_tileset(geo_dict, zooms, buffer = 0,n_neg = None):
     
     Returns: dict with two pandas.DataFrame: 'positive' and 'negative'
     """
-    if len(geo_dict['elements']) is 0:
+    if not len(geo_dict['elements']):
         raise ValueError("The query is empty - cannot continue!")
     if type(zooms) is int:
         zooms = [zooms]
@@ -143,7 +151,7 @@ def shapely_tileset(processed_query,min_ovp = 0,max_ovp = 1,
     Returns:
         A pandas DataFrame with tile locations and corresponding metadata
     """
-    types, xx, yy, qual, tags = [],[],[],[],[],[]
+    types, xx, yy, qual, tags = [],[],[],[],[]
     z = processed_query['zoom']
     for elem in processed_query['elements']:
         for tile in elem['tiles']:

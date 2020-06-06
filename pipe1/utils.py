@@ -45,7 +45,7 @@ def sample_complement(xx,yy,n,buffer = 0):
     print(f"{n_pos} positive tiles; {n_in_box} tiles in area")
     # edge case - we sampled a solid rectangle of tiles
     if n_pos >= n_in_box:
-        msg = f"sh_creator: {n_pos} positive tiles and {n_in_box} total tiles!"
+        msg = f"sample_complement: {n_pos} positive tiles and {n_in_box} total tiles!"
         raise ValueError(msg)
 
     n_neg = min(n_in_box - n_pos,n)

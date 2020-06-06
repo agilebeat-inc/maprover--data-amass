@@ -5,18 +5,18 @@ from setuptools import setup
 
 setup(
     name = "pipe1",
-    version = "0.0.2",
+    version = "0.0.3",
     description = "Utilities for downloading OSM tiles",
     license = "GPL-3",
     author = "AgileBeat",
     author_email = "scott.marchese@agilebeat.com",
-    url = "https://github.com/agilebeat-inc/pipeline-1",
+    url = "https://github.com/agilebeat-inc/maprover--data-amass",
     packages = ['pipe1'],
     scripts = ['bin/download_tiles'],
     python_requires = '>=3.6',
     install_requires = [
         'numpy >= 1.17','pandas >= 0.25','shapely >= 1.6',
         'osmxtract >= 0.0.1','pillow >= 6.2','matplotlib ~= 3.1.2',
-        'wheel ~= 0.33'
+        'wheel ~= 0.33','requests ~= 2.22'
     ]
 )

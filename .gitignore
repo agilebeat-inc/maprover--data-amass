@@ -1,6 +1,7 @@
 # any files to ignore
 **.png
 **.tsv
+**.cfg
 # detritus from package building
 dist/*
 build/*
